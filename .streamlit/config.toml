@@ -1,0 +1,18 @@
+[client]
+toolbarMode = "viewer"
+
+[theme]
+# The main accent color (used for your primary buttons and unlocked tasks)
+primaryColor = "#7C3AED" 
+
+# The main background of the app (Deep Dark)
+backgroundColor = "#121212" 
+
+# The background of the sidebar and secondary elements (Dark Gray)
+secondaryBackgroundColor = "#1E1E1E" 
+
+# The color of the text (Soft White for readability)
+textColor = "#E0E0E0" 
+
+# The font style
+font = "sans serif"
