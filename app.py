@@ -1,5 +1,7 @@
 import streamlit as st
-import sqlite3
+import os
+from sqlalchemy import create_engine, text
+from sqlalchemy.exc import IntegrityError
 
 
 # --- CSS HACK TO HIDE THE "PRESS ENTER TO SUBMIT FORM" TEXT ---
@@ -11,65 +13,97 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-ADMIN_PASSWORD = "EpsteinFuckNiggers"
+ADMIN_PASSWORD = st.secrets.get("ADMIN_PASSWORD")
+DATABASE_URL = os.environ.get("DATABASE_URL") or st.secrets.get("DATABASE_URL")
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+@st.cache_resource
+def get_database_engine():
+    url = DATABASE_URL
+    if url and url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+        
+    return create_engine(
+        url,
+        pool_size=5,
+        pool_recycle=1800,
+        pool_pre_ping=True
+    )
+
+engine = get_database_engine()
 
 # ==========================================
 # 1. DATABASE SETUP
 # ==========================================
-def init_user_db():
-    with sqlite3.connect('users.db') as conn:
-        c = conn.cursor()
-        c.execute('CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT, points INTEGER, time INTEGER)')
 
-def init_data_db():
-    with sqlite3.connect('users.db') as conn:
-        c = conn.cursor()
-        c.execute('''CREATE TABLE IF NOT EXISTS data (
-                        id INTEGER PRIMARY KEY,
-                        username TEXT,
-                        action TEXT,
-                        time TEXT,
-                        successful INTEGER,
-                        data TEXT
-                        )''')  # possible actions: login, begin, hint, dead, submit
+def init_user_db() -> None:
+    query = text("""
+        CREATE TABLE IF NOT EXISTS users
+        (username TEXT PRIMARY KEY, 
+        password TEXT,
+        points INTEGER,
+        time INTEGER)    
+    """)
+    with engine.begin() as conn:
+        conn.execute(query)
 
-def check_login(username, password):
-    with sqlite3.connect('users.db') as conn:
-        c = conn.cursor()
-        c.execute("SELECT * FROM users WHERE username=? AND password=?", (username, password))
-        result = c.fetchone()
-        return result is not None
 
-def create_user(username, password):
+def init_data_db() -> None:
+    query = text("""
+        CREATE TABLE IF NOT EXISTS data
+        (id INTEGER PRIMARY KEY,
+        username TEXT,
+        action TEXT,
+        time TEXT,
+        successful INTEGER,
+        data TEXT)
+    """)  # possible actions: login, begin, hint, dead, submit
+    with engine.begin() as conn:
+        conn.execute(query)
+
+
+def check_login(username: str, password: str) -> bool:
+    query = text("""SELECT * FROM users WHERE username= :username AND password= :password""")
+    with engine.connect() as conn:
+        result = conn.execute(query, {"username": username, "password": password})
+        return result.fetchone() is not None
+
+
+def create_user(username: str, password: str) -> bool:
+    query = text("""INSERT INTO users (username, password, points, time) VALUES (:username, :password, 0, 0)""")
     try:
-        with sqlite3.connect('users.db') as conn:
-            c = conn.cursor()
-            c.execute("INSERT INTO users VALUES (?, ?, 0, 0)", (username, password))
+        with engine.begin() as conn:
+            conn.execute(query, {"username": username, "password": password})
             return True
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         return False
 
-def remove_user(username):
-    with sqlite3.connect('users.db') as conn:
-        c = conn.cursor()
-        c.execute("DELETE FROM users WHERE username=?", (username,))
-        return c.rowcount > 0
 
-def edit_user(username, password, points, time):
-    with sqlite3.connect('users.db') as conn:
-        c = conn.cursor()
-        c.execute("SELECT * FROM users WHERE username=?", (username,))
-        if c.rowcount == 0:
+def remove_user(username: str) -> bool:
+    query = text("""DELETE FROM users WHERE username= :username""")
+    with engine.begin() as conn:
+        result = conn.execute(query, {"username": username})
+        return result.rowcount > 0
+
+
+def edit_user(username: str, password: str, points: str, time: str) -> bool:
+    query1 = text("""SELECT * FROM users WHERE username= :username""")
+    query2 = text("""UPDATE users SET password= :password, points= :points, time= :time WHERE username= :username""")
+    with engine.begin() as conn:
+        result = conn.execute(query1, {"username": username})
+        if result.rowcount == 0:
             return False
-        user_data = c.fetchone()
+        user_data = result.fetchone()
         password = password if password else user_data[1]
         points = points if points else user_data[2]
         time = time if time else user_data[3]
-        c.execute("UPDATE users SET password=?, points=?, time=? WHERE username=?", (password, points, time, username))
-        return c.rowcount > 0
+        conn.execute(query2, {"username": username, "password": password, "points": points, "time": time})
+        return True
 
 
 init_user_db()
+init_data_db()
 
 # ==========================================
 # 2. SESSION MEMORY 
@@ -95,18 +129,16 @@ if st.session_state.admin_logged_in:
     st.title("Admin Dashboard", anchor=False)
     
     st.subheader("Leaderboard", anchor=False)
-    conn = sqlite3.connect('users.db')
-    c = conn.cursor()
-    c.execute("SELECT * FROM users ORDER BY points DESC, time ASC")
-    users = c.fetchall()
-    conn.close()
-    
-    for i, user in enumerate(users):
-        st.write(f"{i+1}. {user[0]} - {user[2]} - {user[3]}")
-    
+    query = text("""SELECT * FROM users ORDER BY points DESC, time ASC""")
+    with engine.connect() as conn:
+        result = conn.execute(query)
+        users = result.fetchall()
+        for i, user in enumerate(users):
+            st.write(f"{i+1}. {user[0]} - {user[2]} - {user[3]}")
+
     st.subheader("Admin functions", anchor=False)
     col1, col2, col3 = st.columns(3)
-    
+
     with col1:
         if st.button("Create user", type="primary"):
             st.session_state.admin_action = "create_user"
@@ -121,7 +153,7 @@ if st.session_state.admin_logged_in:
         if st.button("Edit user", type="primary"):
             st.session_state.admin_action = "edit_user"
             st.rerun()
-    
+
     match st.session_state.admin_action:
         case "create_user":
             with st.form("create_user_form"):
@@ -166,6 +198,7 @@ if st.session_state.admin_logged_in:
         st.session_state.admin_logged_in = False
         st.session_state.admin_mode = False
         st.rerun()
+
 
 # ==========================================
 # 4. ADMIN LOGIN PAGE
