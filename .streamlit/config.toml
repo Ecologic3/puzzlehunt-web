@@ -1,6 +1,10 @@
 [client]
 toolbarMode = "viewer"
 
+[server]
+runOnSave = true
+headless = true
+
 [theme]
 # The main accent color (used for your primary buttons and unlocked tasks)
 primaryColor = "#7C3AED" 
