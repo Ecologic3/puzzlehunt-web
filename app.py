@@ -9,22 +9,22 @@ from views import admin, login, puzzles
 def main():
     host = st.context.headers.get("host", "").split(":")[0].lower()
 
-    PUZZLEHUNT_SUBDOMAIN = "sifrovacka.deadlocked.me"
+    # PUZZLEHUNT_SUBDOMAIN = "sifrovacka.deadlocked.me"
 
-    if host == PUZZLEHUNT_SUBDOMAIN:
-        render_puzzlehunt()
-    else:
-        render_main()
+    # if host == PUZZLEHUNT_SUBDOMAIN:
+    #     render_puzzlehunt()
+    # else:
+    render_main()
 
 
 def render_main():
-    st.set_page_config(page_title="Deadlock", page_icon="assets/favicon.png", layout="centered")
+    st.set_page_config(page_title="Deadlock", page_icon="static/favicon.png", layout="centered")
 
-    st.image("assets/deadlock.png")
+    st.image("static/deadlock.png")
 
 
 def render_puzzlehunt():
-    st.set_page_config(page_title="Šifrovačka", page_icon="assets/favicon.png", layout="centered")
+    st.set_page_config(page_title="Šifrovačka", page_icon="static/favicon.png", layout="centered")
     st.markdown("""
         <style>
         div[data-testid="InputInstructions"] {

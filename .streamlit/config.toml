@@ -4,6 +4,7 @@ toolbarMode = "viewer"
 [server]
 runOnSave = true
 headless = true
+enableStaticServing = true
 
 [theme]
 # The main accent color (used for your primary buttons and unlocked tasks)
