@@ -76,6 +76,7 @@ def init_puzzles_db() -> None:
         CREATE TABLE IF NOT EXISTS puzzles
             (id SERIAL PRIMARY KEY,
             name TEXT,
+            order 
             begin_code TEXT DEFAULT NULL,
             solution TEXT)
     """)

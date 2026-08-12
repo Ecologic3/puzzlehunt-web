@@ -6,46 +6,66 @@ from sqlalchemy.exc import IntegrityError
 from views import admin, login, puzzles
 
 
-st.markdown("""
-    <style>
-    div[data-testid="InputInstructions"] {
-        display: none !important;
-    }
-    </style>
-""", unsafe_allow_html=True)
+def main():
+    host = st.context.headers.get("host", "").split(":")[0].lower()
+
+    PUZZLEHUNT_SUBDOMAIN = "sifrovacka.deadlocked.me"
+
+    if host == PUZZLEHUNT_SUBDOMAIN:
+        render_puzzlehunt()
+    else:
+        render_main()
 
 
-db.init_teams_db()
-db.init_actions_db()
-db.init_logging_db()
-db.init_puzzles_db()
+def render_main():
+    st.set_page_config(page_title="Deadlock", page_icon="assets/favicon.png", layout="centered")
+
+    st.image("assets/deadlock.png")
 
 
-PUBLIC_PAGES = ["login", "admin_login"]
+def render_puzzlehunt():
+    st.set_page_config(page_title="Šifrovačka", page_icon="assets/favicon.png", layout="centered")
+    st.markdown("""
+        <style>
+        div[data-testid="InputInstructions"] {
+            display: none !important;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+    PUBLIC_PAGES = ["login", "admin_login"]
 
-if "current_page" not in st.session_state:
-    st.session_state.current_page = "login"
-if "current_user" not in st.session_state:
-    st.session_state.current_user = None
-if "admin_action" not in st.session_state:
-    st.session_state.admin_action = None
-if "progress" not in st.session_state:
-    st.session_state.progress = 0
+    db.init_teams_db()
+    db.init_actions_db()
+    db.init_logging_db()
+    db.init_puzzles_db()
 
-# Route guard
-if st.session_state.current_page not in PUBLIC_PAGES and not st.session_state.current_user:
-    st.session_state.current_page = "login"
-    st.rerun()
+    if "current_page" not in st.session_state:
+        st.session_state.current_page = "login"
+    if "current_user" not in st.session_state:
+        st.session_state.current_user = None
+    if "admin_action" not in st.session_state:
+        st.session_state.admin_action = None
+    if "progress" not in st.session_state:
+        st.session_state.progress = 0
 
-# Page router
-if st.session_state.current_page == "login":
-    login.render_user_login()
+    # Route guard
+    if st.session_state.current_page not in PUBLIC_PAGES and not st.session_state.current_user:
+        st.session_state.current_page = "login"
+        st.rerun()
 
-elif st.session_state.current_page == "admin_login":
-    login.render_admin_login()
+    # Page router
+    if st.session_state.current_page == "login":
+        login.render_user_login()
 
-elif st.session_state.current_page == "admin_dashboard":
-    admin.render()
+    elif st.session_state.current_page == "admin_login":
+        login.render_admin_login()
 
-elif st.session_state.current_page == "puzzles":
-    puzzles.render()
+    elif st.session_state.current_page == "admin_dashboard":
+        admin.render()
+
+    elif st.session_state.current_page == "puzzles":
+        puzzles.render()
+
+
+if __name__ == "__main__":
+    main()
