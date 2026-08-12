@@ -1,59 +1,73 @@
 import streamlit as st
-import db_funcs
+import db_funcs as db
 
 def render():
     st.title("Admin Dashboard", anchor=False)
     
     st.subheader("Leaderboard", anchor=False)
-    query = text("""
-        SELECT
-            team_color AS "Barva týmu",
-            team_name AS "Jméno týmu",
-            points AS "Body",
-            TO_CHAR(total_time, 'FMHH24 "h" FMMI "m" FMSS "s"') AS "Čas"
-        FROM teams ORDER BY points DESC, total_time ASC
-    """)
-    with engine.connect() as conn:
-        result = conn.execute(query).mappings().all()
-    st.dataframe(result, hide_index=True)
+    leaderboard_data = db.get_leaderboard()
+    st.dataframe(leaderboard_data, hide_index=True)
     st.divider()
 
     st.subheader("Admin functions", anchor=False)
-    col1, col2, col3, col4, col5 = st.columns(5)
+    team_cols = st.columns(3)
+    puzzle_cols = st.columns(3)
+    log_cols = st.columns(3)
 
-    with col1:
-        if st.button("Create team", type="primary", use_container_width=True):
+    with team_cols[0]:
+        if st.button("Create team", type="primary"):
             st.session_state.admin_action = "create_team"
             st.rerun()
 
-    with col2:
-        if st.button("Remove team", type="primary", use_container_width=True):
+    with team_cols[1]:
+        if st.button("Remove team", type="primary"):
             st.session_state.admin_action = "remove_team"
             st.rerun()
 
-    with col3:
-        if st.button("Edit team", type="primary", use_container_width=True):
+    with team_cols[2]:
+        if st.button("Edit team", type="primary"):
             st.session_state.admin_action = "edit_team"
             st.rerun()
+    
+    with puzzle_cols[0]:
+        if st.button("Create puzzle", type="primary"):
+            st.session_state.admin_action = "create_puzzle"
+            st.rerun()
 
-    with col4:
-        if st.button("Show action log", type="primary", use_container_width=True):
+    with puzzle_cols[1]:
+        if st.button("Remove puzzle", type="primary"):
+            st.session_state.admin_action = "remove_puzzle"
+            st.rerun()
+
+    with puzzle_cols[2]:
+        if st.button("Edit puzzle", type="primary"):
+            st.session_state.admin_action = "edit_puzzle"
+            st.rerun()
+
+    with log_cols[0]:
+        if st.button("Show action log", type="primary"):
             st.session_state.admin_action = "action_log"
             st.rerun()
     
-    with col5:
-        if st.button("Show login attempts", type="primary", use_container_width=True):
+    with log_cols[1]:
+        if st.button("Show login attempts", type="primary"):
             st.session_state.admin_action = "login_attempts"
             st.rerun()
+    
+    with log_cols[2]:
+        if st.button("Show puzzle list", type="primary"):
+            st.session_state.admin_action = "puzzle_list"
+            st.rerun()
+
 
     match st.session_state.admin_action:
         case "create_team":
-            with st.form("create_user_form"):
+            with st.form("create_team_form"):
                 team_color = st.text_input("Team color")
                 initial_password = st.text_input("Initial password")
                 submitted = st.form_submit_button("Submit", type="primary")
                 if submitted:
-                    if create_team(team_color, initial_password):
+                    if db.create_team(team_color, initial_password):
                         st.session_state.admin_action = None
                         st.rerun()
                     else:
@@ -64,7 +78,7 @@ def render():
                 team_color = st.text_input("Team color")
                 submitted = st.form_submit_button("Submit", type="primary")
                 if submitted:
-                    if remove_team(team_color):
+                    if db.remove_team(team_color):
                         st.session_state.admin_action = None
                         st.rerun()
                     else:
@@ -79,44 +93,66 @@ def render():
                 total_time = st.text_input("Total time")
                 submitted = st.form_submit_button("Submit", type="primary")
                 if submitted:
-                    if edit_team(team_color, team_name, password, points, total_time):
+                    if db.edit_team(team_color, team_name, password, points, total_time):
                         st.session_state.admin_action = None
                         st.rerun()
                     else:
                         st.error("Error editing team")
-        
+
+        case "create_puzzle":
+            with st.form("create_puzzle_form"):
+                name = st.text_input("Puzzle name")
+                solution = st.text_input("Solution")
+                submitted = st.form_submit_button("Submit", type="primary")
+                if submitted:
+                    if db.create_puzzle(name, solution):
+                        st.session_state.admin_action = None
+                        st.rerun()
+                    else:
+                        st.error("Error creating puzzle")
+
+        case "remove_puzzle":
+            with st.form("remove_puzzle_form"):
+                puzzle_id = st.text_input("Puzzle ID")
+                submitted = st.form_submit_button("Submit", type="primary")
+                if submitted:
+                    if db.remove_puzzle(puzzle_id):
+                        st.session_state.admin_action = None
+                        st.rerun()
+                    else:
+                        st.error("Error removing puzzle")
+
+        case "edit_puzzle":
+            with st.form("edit_puzzle_form"):
+                puzzle_id = st.text_input("Puzzle ID")
+                name = st.text_input("Puzzle name")
+                begin_code = st.text_input("Begin code")
+                solution = st.text_input("Solution")
+                submitted = st.form_submit_button("Submit", type="primary")
+                if submitted:
+                    if db.edit_puzzle(puzzle_id, name, begin_code, solution):
+                        st.session_state.admin_action = None
+                        st.rerun()
+                    else:
+                        st.error("Error editing puzzle")
+
         case "action_log":
-            query = text("""
-                SELECT
-                    id,
-                    team_color AS "Barva týmu",
-                    action AS "Akce",
-                    input AS "Input",
-                    correct AS "Správně",
-                    TO_CHAR(time AT TIME ZONE 'Europe/Bratislava', 'YYYY-MM-DD HH24:MI:SS') AS "Datum a čas"
-                FROM actions
-            """)
-            with engine.connect() as conn:
-                result = conn.execute(query).mappings().all()
-            st.dataframe(result, hide_index=True)
+            action_log = db.get_action_log()
+            st.dataframe(action_log, hide_index=True)
             if st.button("Close", type="primary"):
                 st.session_state.admin_action = None
                 st.rerun()
 
         case "login_attempts":
-            query = text("""
-                SELECT
-                    id,
-                    input_username AS "Input",
-                    password AS "Heslo",
-                    ip_address AS "IP adresa",
-                    user_agent AS "Agent",
-                    TO_CHAR(time AT TIME ZONE 'Europe/Bratislava', 'YYYY-MM-DD HH24:MI:SS') AS "Datum a čas"
-                FROM login_attempts
-            """)
-            with engine.connect() as conn:
-                result = conn.execute(query).mappings().all()
-            st.dataframe(result, hide_index=True)
+            login_attempts = db.get_login_attempts()
+            st.dataframe(login_attempts, hide_index=True)
+            if st.button("Close", type="primary"):
+                st.session_state.admin_action = None
+                st.rerun()
+        
+        case "puzzle_list":
+            puzzle_list = db.get_puzzles()
+            st.dataframe(puzzle_list, hide_index=True)
             if st.button("Close", type="primary"):
                 st.session_state.admin_action = None
                 st.rerun()
@@ -125,4 +161,5 @@ def render():
     
     if st.button("Logout of Admin", type="primary"):
         st.session_state.current_page = "login"
+        st.session_state.current_user = None
         st.rerun()

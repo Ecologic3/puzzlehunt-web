@@ -1,5 +1,6 @@
 import streamlit as st
-import db_funcs
+import db_funcs as db
+import os
 
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD") or st.secrets.get("ADMIN_PASSWORD")
 
@@ -13,17 +14,10 @@ def render_user_login():
         submitted = st.form_submit_button("Přihlásit se", type="primary", use_container_width=True)
 
         if submitted:
-            query = text("""
-                INSERT INTO login_attempts 
-                    (input_username, password, ip_address, user_agent)
-                VALUES
-                    (:input_username, :password, :ip_address, :user_agent)
-            """)
             ip_address = st.context.ip_address
             user_agent = st.context.headers.get("User-Agent")
-            with engine.begin() as conn:
-                conn.execute(query, {"input_username": input_username, "password": password, "ip_address": ip_address, "user_agent": user_agent})
-            if check_login(input_username, password):
+            db.log_login_attempt(input_username, password, ip_address, user_agent)
+            if db.check_login(input_username, password):
                 st.session_state.current_user = input_username
                 st.session_state.current_page = "tasks"
                 st.rerun() 
@@ -45,24 +39,18 @@ def render_admin_login():
     st.write("*Tady nic nenajdete...*")
     
     with st.form("admin_login_form"):
-        admin_pass = st.text_input("Heslo", type="password")
+        password = st.text_input("Heslo", type="password")
         submitted = st.form_submit_button("Přihlásit jako Admin", type="primary", use_container_width=True)
         
         if submitted:
-            query = text("""
-                INSERT INTO login_attempts 
-                    (password, ip_address, user_agent)
-                VALUES
-                    (:admin_pass, :ip_address, :user_agent)
-            """)
             ip_address = st.context.ip_address
             user_agent = st.context.headers.get("User-Agent")
-            with engine.begin() as conn:
-                conn.execute(query, {"admin_pass": admin_pass, "ip_address": ip_address, "user_agent": user_agent})
-            if admin_pass == ADMIN_PASSWORD:
-                st.session_state.current_page = "admin"
+            db.log_login_attempt(None, password, ip_address, user_agent)
+            if password == ADMIN_PASSWORD:
+                st.session_state.current_page = "admin_dashboard"
+                st.session_state.current_user = "admin"
                 st.rerun()
-            elif "epstein" in admin_pass.lower():
+            elif "epstein" in password.lower():
                 st.error("Skoro!")
             else:
                 st.error("Nesprávné adminské heslo.")
