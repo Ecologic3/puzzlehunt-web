@@ -17,9 +17,10 @@ def render_user_login():
             ip_address = st.context.ip_address
             user_agent = st.context.headers.get("User-Agent")
             db.log_login_attempt(input_username, password, ip_address, user_agent)
-            if db.check_login(input_username, password):
-                st.session_state.current_user = input_username
-                st.session_state.current_page = "tasks"
+            team_id = db.check_login(input_username, password)
+            if team_id:
+                st.session_state.current_user = team_id
+                st.session_state.current_page = "puzzles"
                 st.rerun() 
             else:
                 st.error("Nesprávné jméno/barva týmu nebo heslo.")

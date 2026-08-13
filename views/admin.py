@@ -105,18 +105,16 @@ def render():
                 solution = st.text_input("Solution")
                 submitted = st.form_submit_button("Submit", type="primary")
                 if submitted:
-                    if db.create_puzzle(name, solution):
-                        st.session_state.admin_action = None
-                        st.rerun()
-                    else:
-                        st.error("Error creating puzzle")
+                    db.create_puzzle(name, solution)
+                    st.session_state.admin_action = None
+                    st.rerun()
 
         case "remove_puzzle":
             with st.form("remove_puzzle_form"):
-                puzzle_id = st.text_input("Puzzle ID")
+                name = st.text_input("Puzzle name")
                 submitted = st.form_submit_button("Submit", type="primary")
                 if submitted:
-                    if db.remove_puzzle(puzzle_id):
+                    if db.remove_puzzle(name):
                         st.session_state.admin_action = None
                         st.rerun()
                     else:
@@ -124,13 +122,13 @@ def render():
 
         case "edit_puzzle":
             with st.form("edit_puzzle_form"):
-                puzzle_id = st.text_input("Puzzle ID")
                 name = st.text_input("Puzzle name")
+                order = st.text_input("Puzzle order")
                 begin_code = st.text_input("Begin code")
                 solution = st.text_input("Solution")
                 submitted = st.form_submit_button("Submit", type="primary")
                 if submitted:
-                    if db.edit_puzzle(puzzle_id, name, begin_code, solution):
+                    if db.edit_puzzle(name, order, begin_code, solution):
                         st.session_state.admin_action = None
                         st.rerun()
                     else:

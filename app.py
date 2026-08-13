@@ -7,14 +7,19 @@ from views import admin, login, puzzles
 
 
 def main():
-    host = st.context.headers.get("host", "").split(":")[0].lower()
+    # host = st.context.headers.get("host", "").split(":")[0].lower()
+    IS_LOCAL = st.config.get_option("server.address") in ["localhost", "127.0.0.1"] or st.config.get_option("server.port") == 8501
+    if IS_LOCAL:
+        render_puzzlehunt()
+    else:
+        render_main()
 
     # PUZZLEHUNT_SUBDOMAIN = "sifrovacka.deadlocked.me"
 
     # if host == PUZZLEHUNT_SUBDOMAIN:
     #     render_puzzlehunt()
     # else:
-    render_main()
+    #     render_main()
 
 
 def render_main():
@@ -24,6 +29,12 @@ def render_main():
 
 
 def render_puzzlehunt():
+    db.init_puzzles_db()
+    db.init_teams_db()
+    db.init_actions_db()
+    db.init_submissions_db()
+    db.init_logging_db()
+
     st.set_page_config(page_title="Šifrovačka", page_icon="static/favicon.png", layout="centered")
     st.markdown("""
         <style>
@@ -33,11 +44,7 @@ def render_puzzlehunt():
         </style>
     """, unsafe_allow_html=True)
     PUBLIC_PAGES = ["login", "admin_login"]
-
-    db.init_teams_db()
-    db.init_actions_db()
-    db.init_logging_db()
-    db.init_puzzles_db()
+    ACTIVE_PUZZLES = db.get_active_puzzles()
 
     if "current_page" not in st.session_state:
         st.session_state.current_page = "login"
@@ -45,8 +52,6 @@ def render_puzzlehunt():
         st.session_state.current_user = None
     if "admin_action" not in st.session_state:
         st.session_state.admin_action = None
-    if "progress" not in st.session_state:
-        st.session_state.progress = 0
 
     # Route guard
     if st.session_state.current_page not in PUBLIC_PAGES and not st.session_state.current_user:
@@ -64,7 +69,10 @@ def render_puzzlehunt():
         admin.render()
 
     elif st.session_state.current_page == "puzzles":
-        puzzles.render()
+        puzzles.render_main()
+    
+    elif st.session_state.current_page in ACTIVE_PUZZLES:
+        puzzles.render_puzzle(st.session_state.current_page)
 
 
 if __name__ == "__main__":
