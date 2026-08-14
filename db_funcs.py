@@ -33,8 +33,10 @@ def init_puzzles_db() -> None:
         CREATE TABLE IF NOT EXISTS puzzles
             (puzzle_order INTEGER UNIQUE DEFAULT NULL,
             name TEXT,
-            begin_code TEXT DEFAULT NULL,
-            solution TEXT)
+            activation_code TEXT DEFAULT NULL,
+            solution TEXT,
+            filename TEXT DEFAULT NULL,
+            location TEXT DEFAULT "|")
     """)
     with engine.begin() as conn:
         conn.execute(query)
@@ -175,7 +177,7 @@ def remove_puzzle(name: str) -> bool:
         return result.rowcount > 0
 
 
-def edit_puzzle(name: str, order: str, begin_code: str, solution: str) -> bool:
+def edit_puzzle(name: str, order: str, activation_code: str, solution: str, filename: str, location: str) -> bool:
     select_query = text("""
         SELECT * FROM puzzles
         WHERE name = :name
@@ -184,8 +186,10 @@ def edit_puzzle(name: str, order: str, begin_code: str, solution: str) -> bool:
         UPDATE puzzles SET
             puzzle_order = :order,
             name = :name,
-            begin_code = :begin_code,
-            solution = :solution
+            activation_code = :activation_code,
+            solution = :solution,
+            filename = :filename,
+            location = :location
         WHERE name = :name
     """)
     try:
@@ -196,11 +200,15 @@ def edit_puzzle(name: str, order: str, begin_code: str, solution: str) -> bool:
             puzzle_data = result.fetchone()
             order = int(order) if order.isdigit() else puzzle_data[0]
             name = name if name else puzzle_data[1]
-            begin_code = begin_code if begin_code else puzzle_data[2]
+            activation_code = activation_code if activation_code else puzzle_data[2]
             solution = solution if solution else puzzle_data[3]
+            filename = filename if filename else puzzle_data[4]
+            location = location if location else puzzle_data[5]
             conn.execute(update_query, {"name": name, "order": order,
-                                        "begin_code": begin_code,
-                                        "solution": solution})
+                                        "activation_code": activation_code,
+                                        "solution": solution, 
+                                        "filename": filename,
+                                        "location": location})
             return True
     except IntegrityError:
         return False
@@ -279,32 +287,22 @@ def get_puzzles() -> list[RowMapping]:
         SELECT
             puzzle_order as "Pořadí",
             name AS "Název",
-            begin_code AS "Aktivační kód",
-            solution AS "Heslo"
+            activation_code AS "Aktivační kód",
+            solution AS "Heslo",
+            filename as "Název souboru",
+            location as "Lokace šifry"
         FROM puzzles
         ORDER BY puzzle_order
     """)
     with engine.connect() as conn:
         return conn.execute(query).mappings().all()
 
-# ------------------------ Other functions ------------------------
-
-def check_login(input_username: str, password: str) -> int | None:
-    query = text("""
-        SELECT id FROM teams
-        WHERE :input_username IN (team_color, team_name) 
-        AND :password IN (initial_password, password)
-    """)
-    with engine.connect() as conn:
-        result = conn.execute(query, {"input_username": input_username, "password": password}).fetchone()
-        return result[0] if result is not None else None
-
+# ----------------------- Puzzle functions -----------------------
 
 def get_active_puzzles() -> list[str]:
     query = text("""
-        SELECT
-            puzzle_order
-        FROM puzzles
+        SELECT puzzle_order FROM puzzles
+        WHERE puzzle_order IS NOT NULL
         ORDER BY puzzle_order
     """)
     with engine.connect() as conn:
@@ -322,6 +320,36 @@ def get_puzzle_name(puzzle_order: int) -> str:
         return result[0]
 
 
+def get_puzzle_activation_code(puzzle_order: int) -> str:
+    query = text("""
+        SELECT activation_code FROM puzzles
+        WHERE puzzle_order = :puzzle_order
+    """)
+    with engine.connect() as conn:
+        result = conn.execute(query, {"puzzle_order": puzzle_order}).fetchone()
+        return result[0]
+
+
+def get_puzzle_solution(puzzle_order: int) -> str:
+    query = text("""
+        SELECT solution FROM puzzles
+        WHERE puzzle_order = :puzzle_order
+    """)
+    with engine.connect() as conn:
+        result = conn.execute(query, {"puzzle_order": puzzle_order}).fetchone()
+        return result[0]
+
+
+def get_puzzle_location(puzzle_order: int) -> str:
+    query = text("""
+        SELECT location FROM puzzles
+        WHERE puzzle_order = :puzzle_order
+    """)
+    with engine.connect() as conn:
+        result = conn.execute(query, {"puzzle_order": puzzle_order}).fetchone()
+        return result[0]
+
+
 def get_current_puzzle(team_id: int) -> int:
     query = text("""
         SELECT puzzle_order FROM submissions
@@ -331,6 +359,63 @@ def get_current_puzzle(team_id: int) -> int:
     with engine.connect() as conn:
         result = conn.execute(query, {"team_id": team_id}).fetchone()
         return result[0]+1 if result else 1
+
+
+def is_activated(team_id: int, puzzle_order: int) -> bool:
+    query = text("""
+        SELECT * FROM actions
+        WHERE
+            team_id = :team_id AND
+            puzzle_order = :puzzle_order AND
+            action = 'begin'
+    """)
+    with engine.connect() as conn:
+        result = conn.execute(query, {"team_id": team_id, "puzzle_order": puzzle_order})
+        return result.rowcount > 0
+
+
+def is_deaded(team_id: int, puzzle_order: int) -> bool:
+    query = text("""
+        SELECT * FROM actions
+        WHERE
+            team_id = :team_id AND
+            puzzle_order = :puzzle_order AND
+            action = "dead"
+    """)
+    with engine.connect() as conn:
+        result = conn.execute(query, {"team_id": team_id, "puzzle_order": puzzle_order})
+        return result.rowcount > 0
+
+
+def check_hint_eligiblity(team_id: int, puzzle_order: int) -> bool:
+    pass
+
+
+def check_dead_eligiblity(team_id: int, puzzle_order: int) -> bool:
+    pass
+
+
+# ------------------------ Other functions ------------------------
+
+def check_login(input_username: str, password: str) -> int | None:
+    query = text("""
+        SELECT id FROM teams
+        WHERE :input_username IN (team_color, team_name) 
+        AND :password IN (initial_password, password)
+    """)
+    with engine.connect() as conn:
+        result = conn.execute(query, {"input_username": input_username, "password": password}).fetchone()
+        return result[0] if result is not None else None
+
+
+def set_password(team_id: int, new_password: str) -> None:
+    query = text("""
+        UPDATE teams SET
+            password = :password
+        WHERE id = :team_id
+    """)
+    with engine.begin() as conn:
+        conn.execute(query, {"team_id": team_id, "password": new_password})
 
 
 def process_action(team_color: str, puzzle_id: int, action: str, input: str) -> bool:

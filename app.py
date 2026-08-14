@@ -69,9 +69,11 @@ def render_puzzlehunt():
         admin.render()
 
     elif st.session_state.current_page == "puzzles":
+        puzzles.render_navigation()
         puzzles.render_main()
     
     elif st.session_state.current_page in ACTIVE_PUZZLES:
+        puzzles.render_navigation()
         puzzles.render_puzzle(st.session_state.current_page)
 
 

@@ -6,7 +6,7 @@ ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD") or st.secrets.get("ADMIN_PASSW
 
 def render_user_login():
     st.title("K-SCUK Šifrovačka", anchor=False)
-    st.write("*Přihlaste se pro zadávání kódů a hesel k šifrám.*")
+    st.write("*Přihlaste se pro zadávání aktivačních kódů a hesel k šifrám.*")
     
     with st.form("user_login_form"):
         input_username = st.text_input("Jméno/barva týmu")

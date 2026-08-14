@@ -124,11 +124,13 @@ def render():
             with st.form("edit_puzzle_form"):
                 name = st.text_input("Puzzle name")
                 order = st.text_input("Puzzle order")
-                begin_code = st.text_input("Begin code")
+                activation_code = st.text_input("Activation code")
                 solution = st.text_input("Solution")
+                filename = st.text_input("Filename")
+                location = st.text_input("Location")
                 submitted = st.form_submit_button("Submit", type="primary")
                 if submitted:
-                    if db.edit_puzzle(name, order, begin_code, solution):
+                    if db.edit_puzzle(name, order, activation_code, solution, filename, location):
                         st.session_state.admin_action = None
                         st.rerun()
                     else:

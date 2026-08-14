@@ -1,13 +1,14 @@
 import streamlit as st
 import db_funcs as db
+from time import sleep
 
 
-def render_main():
+def render_navigation():
     st.sidebar.title("Přehled", anchor=False)
     
     button_type = "primary" if st.session_state.current_page == "puzzles" else "secondary"
     if st.sidebar.button("Seznam šifer", type=button_type, use_container_width=True):
-        st.session_state.current_page = p
+        st.session_state.current_page = "puzzles"
         st.rerun()
 
     puzzles = db.get_active_puzzles()
@@ -25,56 +26,123 @@ def render_main():
         st.session_state.current_user = None
         st.session_state.current_page = "login" 
         st.rerun()
+    
+    with st.sidebar.expander("Nastavit heslo"):
+        with st.form("set_password"):
+            new_password = st.text_input("Nové heslo:")
+            submitted = st.form_submit_button("Nastavit", type="primary")
 
-    page = st.session_state.current_page
+            if submitted:
+                if len(new_password) < 5:
+                    st.error("Heslo musí mít alespoň 5 znaků.")
+                else:
+                    db.set_password(st.session_state.current_user, new_password)
+                    st.success("Heslo úspěšně nastaveno. Stále však můžete používat i počáteční heslo.")
 
+    
+    st.sidebar.caption("V případě jakýchkoliv problémů volejte Adamovi: +421 949 327 686")
+
+
+def render_main():
     st.title("Seznam šifer", anchor=False)
-    st.write("*Klikněte na odemčenou šifru pro zadání aktivačního kódu nebo hesla*")
+    st.write("Klikněte na odemčenou šifru pro zadání aktivačního kódu nebo hesla")
+    st.write("*Nezapomeňte zadat aktivační kód ihned po nalezení šifry!*")
 
+    puzzles = db.get_active_puzzles()
     current_puzzle = db.get_current_puzzle(st.session_state.current_user)
+    next_puzzle_location, specification = db.get_puzzle_location(current_puzzle).split("|")
+    st.write(f"Lokace poslední odemčené šifry je [zde]({next_puzzle_location}), upřesnítko: {specification}.")
     for p in puzzles:
         puzzle_order = int(p.replace("puzzle_", ""))
         puzzle_name = db.get_puzzle_name(puzzle_order)
 
         if puzzle_order < current_puzzle:
-            if st.button(f"{puzzle_order}. Šifra ({puzzle_name}): Vyřešena ✅", use_container_width=True):  # TODO check if dead
+            is_deaded = db.is_deaded(st.session_state.current_user, puzzle_order)
+            solved_status = "Deadnuta ❎" if is_deaded else "Vyřešena ✅"
+            if st.button(f"{puzzle_order}. {puzzle_name}: {solved_status}", use_container_width=True):
                 st.session_state.current_page = p
                 st.rerun()
         elif puzzle_order == current_puzzle:
-            if st.button(f"{puzzle_order}. Šifra ({puzzle_name}): Připravena na řešení 🔓", type="primary", use_container_width=True):
+            is_activated = db.is_activated(st.session_state.current_user, puzzle_order)
+            activated_status = "V řešení 💭" if is_activated else "Připravena na řešení 🔓"
+            if st.button(f"{puzzle_order}. {puzzle_name}: {activated_status}", type="primary", use_container_width=True):
                 st.session_state.current_page = p
                 st.rerun()
         else:
-            st.button(f"{puzzle_order}. Šifra ({puzzle_name}): Zamčena 🔒", disabled=True, use_container_width=True)
+            st.button(f"{puzzle_order}. {puzzle_name}: Zamčena 🔒", disabled=True, use_container_width=True)
 
 
-def render_puzzle(puzzle: str):
-    task_num = 5
-    st.title(f"Puzzle {task_num}", anchor=False)
-    
-    if st.session_state.progress >= task_num:
-        if task_num == 5:
-            st.success("Correct! You have completed the final puzzle! 🎉 All puzzles are done!")
+def render_puzzle(puzzle_order: str):
+    puzzles = db.get_active_puzzles()
+    puzzle_order_number = int(puzzle_order.replace("puzzle_", ""))
+    puzzle_name = db.get_puzzle_name(puzzle_order_number)
+
+    st.title(f"{puzzle_order_number}. {puzzle_name}", anchor=False)
+
+    current_puzzle = db.get_current_puzzle(st.session_state.current_user)
+    if puzzle_order_number < current_puzzle:
+        if puzzle_order_number == len(puzzles):
+            st.success("Všechny šifry byly vyřešeny! 🎉")
             st.balloons()
         else:
-            st.success("You have already solved this puzzle!")
-            if st.button(f"Go to Puzzle {task_num + 1}", type="primary"):
-                st.session_state.current_page = f"Puzzle {task_num + 1}"
+            st.success("Tuto šifru jste už **vyřešili**.")
+            next_puzzle_name = db.get_puzzle_name(current_puzzle)
+            next_puzzle_location, specification = db.get_puzzle_location(current_puzzle).split("|")
+            st.write(f"Lokace poslední odemčené šifry je [zde]({next_puzzle_location}), upřesnítko: {specification}.")
+            if st.button(f"Poslední odemčená šifra: **{current_puzzle}. {next_puzzle_name}**", type="primary"):
+                st.session_state.current_page = "puzzle_" + str(current_puzzle)
                 st.rerun()
-                
-    elif st.session_state.progress < task_num - 1:
-        st.error(f"**Locked!** You must solve Puzzle {task_num - 1} before you can attempt this puzzle.")
+
+    elif puzzle_order_number > current_puzzle:
+        st.error(f"Tato šifra je **zamčená**. Vyřešte všechny předchozí šifry pro odemčení.")
         
     else:
-        st.info("This puzzle is unlocked. Enter the secret code to solve it.")
-        
-        with st.form(f"task_form_{task_num}"):
-            entered_code = st.text_input("Secret Code:")
-            submitted = st.form_submit_button("Submit Code", type="primary")
-            
-            if submitted:
-                if entered_code.lower() == secret_codes[task_num]:
-                    st.session_state.progress = task_num 
-                    st.rerun() 
-                else:
-                    st.error("Incorrect code. Try again!")
+        is_activated = db.is_activated(st.session_state.current_user, puzzle_order_number)
+        if is_activated:
+            st.info("Tuto šifru už řešíte a čas vám běží.")
+
+            with st.form(f"puzzle_form_{puzzle_order_number}"):
+                input_solution = st.text_input("Heslo:")
+                submitted = st.form_submit_button("Odevzdat", type="primary")
+
+                if submitted:
+                    db.log_action(st.session_state.current_user, current_puzzle, "submit")
+                    solution = db.get_puzzle_solution(puzzle_order_number)  # TODO logging action, logging submit, process action
+                    if entered_code.upper() == solution:
+                        pass
+                        st.success("Správné heslo!")
+                        sleep(2)
+                        st.rerun()
+                    else:
+                        st.error("Nesprávné heslo!")
+
+            hint_eligible = db.check_hint_eligiblity(st.session_state.current_user, current_puzzle)
+            with st.popover("Získat nápovědu", type="primary", disabled=False):
+                st.write("Opravdu chcete získat nápovědu? Po nápovědě můžete za šifru získat nejvýše 1 bod.")
+                if st.button("Potvrdit", key="conf_1"):
+                    db.log_action(st.session_state.current_user, current_puzzle, "hint")
+                    pass
+
+            dead_eligible = db.check_dead_eligiblity(st.session_state.current_user, current_puzzle)
+            with st.popover("Vzdát šifru", type="primary", disabled=not dead_eligible):
+                st.write("Opravdu chcete vzdát šifru? Po deadnutí nezískáte za šifru **žádné** body!")
+                if st.button("Potvrdit", key="conf_2"):
+                    db.log_action(st.session_state.current_user, current_puzzle, "dead")
+                    pass
+
+        else:
+            st.info("Pro zahájení řešení šifry zadejte aktivační kód.")
+
+            with st.form(f"puzzle_activation_form_{puzzle_order_number}"):
+                input_code = st.text_input("Aktivační kód:")
+                submitted = st.form_submit_button("Odevzdat", type="primary")
+
+                if submitted:
+                    activation_code = db.get_puzzle_activation_code(puzzle_order_number)
+                    if input_code.lower() == activation_code:
+                        st.success("Šifra aktivována, můžete řešit.")
+                        db.log_action(st.session_state.current_user, current_puzzle, "begin")
+                        sleep(3)
+                        st.rerun() 
+                    else:
+                        st.error("Nesprávný kód!")
