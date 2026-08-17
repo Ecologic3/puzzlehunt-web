@@ -178,8 +178,8 @@ def render_puzzle(puzzle_page: str):
             # Download puzzle PDF button
             with cols1[2]:
                 puzzle_filename = current_puzzle_data["filename"]
-                if puzzle_filename and os.path.exists(f"puzzles/{puzzle_filename}"):
-                    with open(f"puzzles/{puzzle_filename}", "rb") as file:
+                if puzzle_filename and os.path.exists(f"puzzles/{puzzle_filename}.pdf"):
+                    with open(f"puzzles/{puzzle_filename}.pdf", "rb") as file:
                         st.download_button(
                             label="Stáhnout šifru",
                             data=file,
