@@ -17,6 +17,7 @@ class PuzzleData(TypedDict):
     filename: str | None
     location: str
 
+
 class PuzzleStatus(TypedDict):
     is_activated: bool
     is_hinted: bool
@@ -27,6 +28,7 @@ DATABASE_URL = os.environ.get("DATABASE_URL") or st.secrets.get("DATABASE_URL")
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
+
 @st.cache_resource
 def get_database_engine():
     url = DATABASE_URL
@@ -34,13 +36,14 @@ def get_database_engine():
         raise ValueError("No database URL found.")
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql://", 1)
-        
+
     return create_engine(
         url,
         pool_size=5,
         pool_recycle=1800,
         pool_pre_ping=True
     )
+
 
 engine = get_database_engine()
 
@@ -107,18 +110,19 @@ def initialize_tables() -> None:
         for query in queries:
             conn.execute(query)
 
+
 # ------------------------ Admin functions ------------------------
 
 def create_team(team_color: str, initial_password: str, path: str) -> bool:
     query = text("""
-        INSERT INTO teams 
+        INSERT INTO teams
             (team_color, initial_password, path)
-        VALUES 
+        VALUES
             (:team_color, :password, :path)
     """)
     try:
         with engine.begin() as conn:
-            conn.execute(query, {"team_color": team_color, 
+            conn.execute(query, {"team_color": team_color,
                                  "password": initial_password,
                                  "path": path})
             return True
@@ -142,7 +146,7 @@ def edit_team(team_color: str, team_name: str, path: str, password: str, points:
         WHERE team_color = :team_color
     """)
     update_query = text("""
-        UPDATE teams SET 
+        UPDATE teams SET
             team_name = :team_name,
             path = :path,
             password = :password,
@@ -255,11 +259,12 @@ def reset_database() -> None:
         conn.execute(query)
     initialize_tables()
 
+
 # ----------------------- Logging functions -----------------------
 
 def log_login_attempt(input_username: str | None, password: str, ip_address: str | None, user_agent: str | None) -> None:
     query = text("""
-        INSERT INTO login_attempts 
+        INSERT INTO login_attempts
             (input_username, password, ip_address, user_agent)
         VALUES
             (:input_username, :password, :ip_address, :user_agent)
@@ -267,7 +272,7 @@ def log_login_attempt(input_username: str | None, password: str, ip_address: str
     try:
         with engine.begin() as conn:
             conn.execute(query, {"input_username": input_username, "password": password,
-                                "ip_address": ip_address, "user_agent": user_agent})
+                                 "ip_address": ip_address, "user_agent": user_agent})
     except exc.SQLAlchemyError:
         pass
 
@@ -281,6 +286,7 @@ def log_action(team_id: int, puzzle_order: int, action: str) -> None:
     """)
     with engine.begin() as conn:
         conn.execute(query, {"team_id": team_id, "puzzle_order": puzzle_order, "action": action})
+
 
 # ----------------------- Display functions -----------------------
 
@@ -369,6 +375,7 @@ def get_puzzles() -> Sequence[RowMapping]:
     with engine.connect() as conn:
         return conn.execute(query).mappings().all()
 
+
 # ----------------------- Puzzle functions -----------------------
 
 @st.cache_data()
@@ -396,7 +403,7 @@ def get_puzzle_data(puzzle_order: int) -> PuzzleData:
 
 def get_puzzle_status(team_id: int, puzzle_order: int) -> PuzzleStatus:
     query = text("""
-        SELECT 
+        SELECT
             EXISTS (SELECT 1 FROM actions WHERE team_id = :team_id AND puzzle_order = :puzzle_order AND action = 'begin') AS is_activated,
             EXISTS (SELECT 1 FROM actions WHERE team_id = :team_id AND puzzle_order = :puzzle_order AND action = 'hint') AS is_hinted,
             EXISTS (SELECT 1 FROM actions WHERE team_id = :team_id AND puzzle_order = :puzzle_order AND action = 'dead') AS is_deaded
@@ -494,12 +501,13 @@ def submit_solution(team_id: int, puzzle_order: int, input_solution: str) -> boo
 
         return is_correct
 
+
 # ------------------------ Other functions ------------------------
 
 def check_login(input_username: str, password: str) -> int | None:
     query = text("""
         SELECT id FROM teams
-        WHERE :input_username IN (team_color, team_name) 
+        WHERE :input_username IN (team_color, team_name)
         AND :password IN (initial_password, password)
     """)
     with engine.connect() as conn:

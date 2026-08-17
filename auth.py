@@ -1,4 +1,4 @@
-import extra_streamlit_components as stx
+import extra_streamlit_components as stx  # type: ignore[import-untyped]
 import streamlit as st
 
 

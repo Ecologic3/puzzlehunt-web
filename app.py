@@ -15,7 +15,7 @@ def main():
 
     if host == PUZZLEHUNT_SUBDOMAIN:
         if ACCESS_TOKEN:  # Not public access
-            token = st.query_params.get("token")
+            token = st.query_params.get("secret")
             if token == ACCESS_TOKEN:
                 render_puzzlehunt()
             else:
@@ -49,7 +49,7 @@ def render_puzzlehunt():
         st.session_state.current_page = "login"
         st.session_state.current_user = None
         st.session_state.admin_action = None
-    
+
     cookie_manager = get_cookie_manager()
     if not st.session_state.is_hydrated:
         cookies = cookie_manager.get_all()
@@ -62,7 +62,6 @@ def render_puzzlehunt():
             st.session_state.current_page = "puzzles"
 
         st.session_state.is_hydrated = True
-
 
     # Page router
     if st.session_state.current_page == "admin_login":

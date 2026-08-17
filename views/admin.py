@@ -8,9 +8,10 @@ import db_funcs as db
 
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD") or st.secrets.get("ADMIN_PASSWORD")
 
+
 def render():
     st.title("Admin Dashboard", anchor=False)
-    
+
     # Leaderboard rendering
     st.subheader("Leaderboard", anchor=False)
     leaderboard_data = db.get_leaderboard(True)
@@ -40,7 +41,7 @@ def render():
         if st.button("Edit team", type="primary", use_container_width=True):
             st.session_state.admin_action = "edit_team"
             st.rerun()
-    
+
     with puzzle_cols[0]:  # Create puzzle
         if st.button("Create puzzle", type="primary", use_container_width=True):
             st.session_state.admin_action = "create_puzzle"
@@ -70,7 +71,7 @@ def render():
         if st.button("Show login attempts", type="primary", use_container_width=True):
             st.session_state.admin_action = "login_attempts"
             st.rerun()
-    
+
     with log_cols[3]:  # Show puzzle list
         if st.button("Show puzzle list", type="primary", use_container_width=True):
             st.session_state.admin_action = "puzzle_list"
@@ -80,7 +81,7 @@ def render():
         if st.button("Manual SQL query", type="primary", use_container_width=True):
             st.session_state.admin_action = "sql_query"
             st.rerun()
-    
+
     with other_cols[1]:  # Clear cache
         if st.button("Clear cache", type="primary", use_container_width=True):
             st.cache_data.clear()
@@ -92,7 +93,6 @@ def render():
         if st.button("Reset database", type="primary", use_container_width=True):
             st.session_state.admin_action = "reset_database"
             st.rerun()
-
 
     # Admin functions
     match st.session_state.admin_action:
@@ -199,7 +199,7 @@ def render():
             if st.button("Close", type="primary"):
                 st.session_state.admin_action = None
                 st.rerun()
-    
+
         case "submission_log":
             submission_log = db.get_submissions()
             st.dataframe(submission_log, hide_index=True)
@@ -213,7 +213,7 @@ def render():
             if st.button("Close", type="primary"):
                 st.session_state.admin_action = None
                 st.rerun()
-        
+
         case "puzzle_list":
             puzzle_list = db.get_puzzles()
             st.dataframe(puzzle_list, hide_index=True)
@@ -250,7 +250,7 @@ def render():
                         st.error("Incorrect admin password.")
 
     st.divider()
-    
+
     # Admin logout
     if st.button("Logout of Admin"):
         st.session_state.current_page = "login"

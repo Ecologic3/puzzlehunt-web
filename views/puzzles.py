@@ -27,7 +27,7 @@ def render_navigation():
         if st.sidebar.button(page_name, type=button_type, use_container_width=True):
             st.session_state.current_page = puzzle_page
             st.rerun()
-    
+
     with open("static/sifrovaci-pomucka.pdf", "rb") as file:  # Puzzle solving help
         st.sidebar.download_button(
             label="Šifrovací pomůcka",
@@ -45,21 +45,21 @@ def render_navigation():
         st.session_state.current_page = "leaderboard"
         st.rerun()
 
-    st.sidebar.divider() 
+    st.sidebar.divider()
 
     # Logout and set password
     render_logout()
 
     with st.sidebar.expander("Nastavit heslo"), st.form("set_password"):
-            new_password = st.text_input("Nové heslo:")
-            submitted = st.form_submit_button("Nastavit", type="primary")
+        new_password = st.text_input("Nové heslo:")
+        submitted = st.form_submit_button("Nastavit", type="primary")
 
-            if submitted:
-                if len(new_password) < 5:
-                    st.error("Heslo musí mít alespoň 5 znaků.")
-                else:
-                    db.set_password(current_user, new_password)
-                    st.success("Heslo úspěšně nastaveno. Stále však můžete používat i počáteční heslo.")
+        if submitted:
+            if len(new_password) < 5:
+                st.error("Heslo musí mít alespoň 5 znaků.")
+            else:
+                db.set_password(current_user, new_password)
+                st.success("Heslo úspěšně nastaveno. Stále však můžete používat i počáteční heslo.")
 
     st.sidebar.caption("V případě jakýchkoliv problémů volejte Adamovi: +421 949 327 686")
 
@@ -88,7 +88,7 @@ def render_main():
         st.write("Klikněte na odemčenou šifru pro zadání aktivačního kódu nebo hesla")
         st.write("*Nezapomeňte zadat aktivační kód ihned po nalezení šifry!*")
         st.write(f"Lokace poslední odemčené šifry je [zde]({current_puzzle_location}), upřesnítko: {specification}.")
-    
+
     st.divider()
 
     # Puzzle and status list
@@ -135,7 +135,7 @@ def render_puzzle(puzzle_page: str):
             current_puzzle_data = db.get_puzzle_data(current_puzzle)
             current_puzzle_name = current_puzzle_data["name"]
             team_path = db.get_team_path(current_user)
-            current_puzzle_location, specification = current_puzzle_data[f"location_{team_path}"].split("|")
+            current_puzzle_location, specification = current_puzzle_data[f"location_{team_path}"].split("|")  # type: ignore[literal-required]
             st.write(f"Lokace poslední odemčené šifry je [zde]({current_puzzle_location}), upřesnítko: {specification}.")
             if st.button(f"Poslední odemčená šifra: **{current_puzzle}. {current_puzzle_name}**", type="primary"):
                 st.session_state.current_page = f"puzzle_{current_puzzle}"
@@ -143,13 +143,13 @@ def render_puzzle(puzzle_page: str):
 
     elif rendered_puzzle > current_puzzle:   # Locked puzzle
         st.error("Tato šifra je **zamčená**. Vyřešte všechny předchozí šifry pro odemčení.")
-        
+
     else:  # Current puzzle
         current_puzzle_data = db.get_puzzle_data(current_puzzle)
         current_puzzle_status = db.get_puzzle_status(current_user, current_puzzle)
         current_puzzle_name = current_puzzle_data["name"]
         team_path = db.get_team_path(current_user)
-        current_puzzle_location, specification = current_puzzle_data[f"location_{team_path}"].split("|")
+        current_puzzle_location, specification = current_puzzle_data[f"location_{team_path}"].split("|")  # type: ignore[literal-required]
 
         is_activated = current_puzzle_status["is_activated"]
         if is_activated:  # Solveable
@@ -172,8 +172,8 @@ def render_puzzle(puzzle_page: str):
                     else:
                         st.error("Nesprávné heslo!")
 
-            cols1 = st.columns([1,2,1])
-            cols2 = st.columns([1,2,1])
+            cols1 = st.columns([1, 2, 1])
+            cols2 = st.columns([1, 2, 1])
 
             # Download puzzle PDF button
             with cols1[2]:
@@ -192,8 +192,8 @@ def render_puzzle(puzzle_page: str):
             # Hint and dead options
             hint_eligible = db.check_hint_eligiblity(current_user, current_puzzle)
             with cols1[0], st.popover("Získat nápovědu", type="primary", disabled=not hint_eligible,
-                            help="Nápovědu můžete získat až po 15 minutách od začátku řešení." if not hint_eligible else None,
-                            use_container_width=True):
+                                      help="Nápovědu můžete získat až po 15 minutách od začátku řešení." 
+                                      if not hint_eligible else None, use_container_width=True):
                 if is_hinted:
                     st.write("Nápovědu jste už získali.")
                 else:
@@ -206,8 +206,8 @@ def render_puzzle(puzzle_page: str):
 
             dead_eligible = db.check_dead_eligiblity(current_user, current_puzzle)
             with cols2[0], st.popover("Vzdát šifru", type="primary", disabled=not dead_eligible,
-                            help="Vzdát šifru můžete po získání nápovědy a až po 30 minutách od začátku řešení." if not dead_eligible else None,
-                            use_container_width=True):
+                                      help="Vzdát šifru můžete po získání nápovědy a až po 30 minutách od začátku řešení."
+                                      if not dead_eligible else None, use_container_width=True):
                 st.write("Opravdu chcete vzdát šifru? Po deadnutí nezískáte za šifru **žádné** body!")
                 if st.button("Potvrdit", key="conf_2"):
                     st.success("Šifra deadnuta.")
@@ -230,6 +230,6 @@ def render_puzzle(puzzle_page: str):
                         st.success("Šifra aktivována, můžete řešit.")
                         db.log_action(current_user, current_puzzle, "begin")
                         sleep(2)
-                        st.rerun() 
+                        st.rerun()
                     else:
                         st.error("Nesprávný kód!")

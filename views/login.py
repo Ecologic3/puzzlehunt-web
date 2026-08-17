@@ -10,12 +10,13 @@ ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD") or st.secrets.get("ADMIN_PASSW
 if not ADMIN_PASSWORD:
     raise ValueError("Admin password is not set up!")
 
+
 def render_user_login():
     cookie_manager = get_cookie_manager()
 
     st.title("K-SCUK Šifrovačka", anchor=False)
     st.write("*Přihlaste se pro zadávání aktivačních kódů a hesel k šifrám.*")
-    
+
     with st.form("user_login_form"):
         input_username = st.text_input("Jméno/barva týmu")
         password = st.text_input("Heslo", type="password")
@@ -40,9 +41,9 @@ def render_user_login():
             st.session_state.current_page = "puzzles"
         else:
             st.error("Nesprávné jméno/barva týmu nebo heslo.")
-            
+
     st.divider()
-    
+
     cols = st.columns(3)
 
     with cols[1]:
@@ -54,11 +55,11 @@ def render_user_login():
 def render_admin_login():
     st.title("Adminský přístup", anchor=False)
     st.write("*Tady nic nenajdete...*")
-    
+
     with st.form("admin_login_form"):
         password = st.text_input("Heslo", type="password")
         submitted = st.form_submit_button("Přihlásit jako Admin", type="primary", use_container_width=True)
-        
+
         if submitted:
             ip_address = st.context.ip_address
             user_agent = st.context.headers.get("User-Agent")
@@ -71,7 +72,7 @@ def render_admin_login():
                 st.error("Skoro!")
             else:
                 st.error("Nesprávné adminské heslo.")
-    
+
     if st.button("Zpátky na týmové přihlášení", use_container_width=True):
         st.session_state.current_page = "login"
         st.rerun()
