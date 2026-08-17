@@ -12,35 +12,16 @@ if not ADMIN_PASSWORD:
 
 
 def render_user_login():
-    cookie_manager = get_cookie_manager()
-
     st.title("K-SCUK Šifrovačka", anchor=False)
     st.write("*Přihlaste se pro zadávání aktivačních kódů a hesel k šifrám.*")
 
     with st.form("user_login_form"):
-        input_username = st.text_input("Jméno/barva týmu")
-        password = st.text_input("Heslo", type="password")
-        submitted = st.form_submit_button("Přihlásit se", type="primary", use_container_width=True)
+        st.text_input("Jméno/barva týmu", key="login_username")
+        st.text_input("Heslo", type="password", key="login_password")
+        st.form_submit_button("Přihlásit se", type="primary", use_container_width=True, on_click=process_login)
 
-    if submitted:
-        ip_address = st.context.ip_address
-        user_agent = st.context.headers.get("User-Agent")
-        db.log_login_attempt(input_username, password, ip_address, user_agent)
-        team_id = db.check_login(input_username, password)
-
-        if team_id:
-            expiry = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
-            cookie_manager.set(
-                cookie="logged_in_team_id",
-                val=team_id,
-                expires_at=expiry,
-                key="login_cookie_set",
-                same_site="lax"
-            )
-            st.session_state.current_user = team_id
-            st.session_state.current_page = "puzzles"
-        else:
-            st.error("Nesprávné jméno/barva týmu nebo heslo.")
+    if st.session_state.pop("login_error", False):
+        st.error("Nesprávné jméno/barva týmu nebo heslo.")
 
     st.divider()
 
@@ -81,7 +62,31 @@ def render_logout():
     st.sidebar.button("Odhlásit se", use_container_width=True, on_click=process_logout)
 
 
+def process_login():
+    input_username = st.session_state.login_username
+    input_password = st.session_state.login_password
+
+    ip_address = st.context.ip_address
+    user_agent = st.context.headers.get("User-Agent")
+    db.log_login_attempt(input_username, input_password, ip_address, user_agent)
+    team_id = db.check_login(input_username, input_password)
+
+    if team_id:
+        cookie_manager = get_cookie_manager()
+        expiry = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
+        cookie_manager.set(
+            cookie="logged_in_team_id",
+            val=team_id,
+            expires_at=expiry,
+            key="login_cookie_set",
+            same_site="lax"
+        )
+        st.session_state.current_user = team_id
+        st.session_state.current_page = "puzzles"
+    else:
+        st.session_state.login_error = True
+
+
 def process_logout():
     get_cookie_manager().delete("logged_in_team_id", key="logout_cookie_del")
     st.session_state.clear()
-    st.rerun()

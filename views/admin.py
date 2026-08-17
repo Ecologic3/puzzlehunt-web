@@ -253,6 +253,5 @@ def render():
 
     # Admin logout
     if st.button("Logout of Admin"):
-        st.session_state.current_page = "login"
-        st.session_state.current_user = None
+        st.session_state.clear()
         st.rerun()
