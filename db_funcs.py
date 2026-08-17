@@ -551,11 +551,11 @@ def add_time(team_id: int, start_time: datetime) -> None:
 
 
 @st.cache_data
-def get_setting(setting: str) -> bool:
+def get_setting(setting: str) -> Any | None:
     query = text("""
         SELECT value FROM app_settings
         WHERE
             key = :setting
     """)
     with engine.connect() as conn:
-        return conn.execute(query, {"setting": setting}).one()[0] == "true"
+        return conn.execute(query, {"setting": setting}).fetchone()

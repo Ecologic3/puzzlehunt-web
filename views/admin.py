@@ -150,6 +150,7 @@ def render():
                 submitted = st.form_submit_button("Submit", type="primary")
                 if submitted:
                     db.create_puzzle(name, solution)
+                    st.cache_data.clear()
                     st.session_state.admin_action = None
                     st.rerun()
 
@@ -159,6 +160,7 @@ def render():
                 submitted = st.form_submit_button("Submit", type="primary")
                 if submitted:
                     if db.remove_puzzle(name):
+                        st.cache_data.clear()
                         st.session_state.admin_action = None
                         st.rerun()
                     else:
@@ -185,6 +187,7 @@ def render():
                         order = None
                     if db.edit_puzzle(name, order, activation_code, solution,
                                       hint, filename, location_a, location_b):
+                        st.cache_data.clear()
                         st.session_state.admin_action = None
                         st.rerun()
                     else:
@@ -240,6 +243,7 @@ def render():
                     if input_password == ADMIN_PASSWORD:
                         st.success("Resetting database.")
                         db.reset_database()
+                        st.cache_data.clear()
                         st.session_state.admin_action = None
                         st.rerun()
                     else:

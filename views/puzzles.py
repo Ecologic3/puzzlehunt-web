@@ -39,6 +39,7 @@ def render_navigation():
         )
 
     is_end = db.get_setting("is_end")
+    is_end = False if is_end is None else is_end == "true"
     if st.sidebar.button("Výsledky", type="primary", disabled=not is_end,
                          help="Bude dostupné po konci hry" if not is_end else None, use_container_width=True):
         st.session_state.current_page = "leaderboard"
