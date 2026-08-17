@@ -66,7 +66,6 @@ def render_admin_login():
             db.log_login_attempt(None, password, ip_address, user_agent)
             if password == ADMIN_PASSWORD:
                 st.session_state.current_page = "admin_dashboard"
-                st.session_state.current_user = "admin"
                 st.rerun()
             elif "epstein" in password.lower():
                 st.error("Skoro!")
@@ -81,5 +80,5 @@ def render_admin_login():
 def render_logout():
     if st.sidebar.button("Odhlásit se", use_container_width=True):
         get_cookie_manager().delete("logged_in_team_id", key="logout_cookie_del")
-        st.session_state.current_user = None
         st.session_state.current_page = "login"
+        st.session_state.current_user = None
