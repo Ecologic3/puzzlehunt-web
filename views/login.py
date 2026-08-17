@@ -1,10 +1,16 @@
-import streamlit as st
-import db_funcs as db
+import datetime
 import os
+from time import sleep
+
+import streamlit as st
+
+import db_funcs as db
+from auth import get_cookie_manager
 
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD") or st.secrets.get("ADMIN_PASSWORD")
 
 def render_user_login():
+    cookie_manager = get_cookie_manager()
     st.title("K-SCUK Šifrovačka", anchor=False)
     st.write("*Přihlaste se pro zadávání aktivačních kódů a hesel k šifrám.*")
     
@@ -19,17 +25,26 @@ def render_user_login():
             db.log_login_attempt(input_username, password, ip_address, user_agent)
             team_id = db.check_login(input_username, password)
             if team_id:
+                expiry = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
+                cookie_manager.set(
+                    cookie="logged_in_user_id",
+                    val=team_id,
+                    expires_at=expiry,
+                    key="login_cookie_set",
+                    same_site="lax"
+                )
                 st.session_state.current_user = team_id
                 st.session_state.current_page = "puzzles"
+                sleep(0.3)
                 st.rerun() 
             else:
                 st.error("Nesprávné jméno/barva týmu nebo heslo.")
             
     st.divider()
     
-    col1, col2, col3 = st.columns([1, 1, 1])
+    cols = st.columns(3)
 
-    with col2:
+    with cols[1]:
         if st.button("Admin Login", use_container_width=True):
             st.session_state.current_page = "admin_login"
             st.rerun()

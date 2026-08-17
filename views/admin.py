@@ -1,5 +1,10 @@
+from datetime import timedelta
+from time import sleep
+
 import streamlit as st
+
 import db_funcs as db
+
 
 def render():
     st.title("Admin Dashboard", anchor=False)
@@ -7,12 +12,14 @@ def render():
     st.subheader("Leaderboard", anchor=False)
     leaderboard_data = db.get_leaderboard()
     st.dataframe(leaderboard_data, hide_index=True)
+    if st.button("Refresh"):
+        st.rerun()
     st.divider()
 
     st.subheader("Admin functions", anchor=False)
     team_cols = st.columns(3)
     puzzle_cols = st.columns(3)
-    log_cols = st.columns(3)
+    log_cols = st.columns(4)
 
     with team_cols[0]:
         if st.button("Create team", type="primary"):
@@ -48,17 +55,25 @@ def render():
         if st.button("Show action log", type="primary"):
             st.session_state.admin_action = "action_log"
             st.rerun()
-    
+
     with log_cols[1]:
+        if st.button("Show submissions", type="primary"):
+            st.session_state.admin_action = "submission_log"
+            st.rerun()
+
+    with log_cols[2]:
         if st.button("Show login attempts", type="primary"):
             st.session_state.admin_action = "login_attempts"
             st.rerun()
     
-    with log_cols[2]:
+    with log_cols[3]:
         if st.button("Show puzzle list", type="primary"):
             st.session_state.admin_action = "puzzle_list"
             st.rerun()
 
+    if st.button("Manual SQL query", type="primary"):
+        st.session_state.admin_action = "sql_query"
+        st.rerun()
 
     match st.session_state.admin_action:
         case "create_team":
@@ -93,6 +108,13 @@ def render():
                 total_time = st.text_input("Total time")
                 submitted = st.form_submit_button("Submit", type="primary")
                 if submitted:
+                    if total_time:
+                        if not total_time.isdigit():
+                            total_time = None
+                        else:
+                            total_time = timedelta(seconds=int(total_time))
+                    else:
+                        total_time = None
                     if db.edit_team(team_color, team_name, password, points, total_time):
                         st.session_state.admin_action = None
                         st.rerun()
@@ -126,11 +148,19 @@ def render():
                 order = st.text_input("Puzzle order")
                 activation_code = st.text_input("Activation code")
                 solution = st.text_input("Solution")
+                hint = st.text_input("Hint")
                 filename = st.text_input("Filename")
                 location = st.text_input("Location")
                 submitted = st.form_submit_button("Submit", type="primary")
                 if submitted:
-                    if db.edit_puzzle(name, order, activation_code, solution, filename, location):
+                    if order:
+                        if not order.isdigit():
+                            order = None
+                        else:
+                            order = int(order)
+                    else:
+                        order = None
+                    if db.edit_puzzle(name, order, activation_code, solution, hint, filename, location):
                         st.session_state.admin_action = None
                         st.rerun()
                     else:
@@ -139,6 +169,13 @@ def render():
         case "action_log":
             action_log = db.get_action_log()
             st.dataframe(action_log, hide_index=True)
+            if st.button("Close", type="primary"):
+                st.session_state.admin_action = None
+                st.rerun()
+    
+        case "submission_log":
+            submission_log = db.get_submissions()
+            st.dataframe(submission_log, hide_index=True)
             if st.button("Close", type="primary"):
                 st.session_state.admin_action = None
                 st.rerun()
@@ -157,9 +194,24 @@ def render():
                 st.session_state.admin_action = None
                 st.rerun()
 
+        case "sql_query":
+            with st.form("sql_query_form"):
+                    query = st.text_input("SQL Query")
+                    submitted = st.form_submit_button("Submit", type="primary")
+                    if submitted:
+                        success, result = db.execute_query(query)
+                        if success:
+                            st.success(f"Success! Output: {result}")
+                            sleep(2)
+                            st.session_state.admin_action = None
+                            st.rerun()
+                        else:
+                            st.error(f"Error while executing query: {result}")
+
+
     st.divider()
     
-    if st.button("Logout of Admin", type="primary"):
+    if st.button("Logout of Admin"):
         st.session_state.current_page = "login"
         st.session_state.current_user = None
         st.rerun()
