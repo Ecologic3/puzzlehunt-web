@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.config as st_config
 
 import db_funcs as db
 from auth import get_cookie_manager
@@ -7,19 +6,22 @@ from views import admin, login, puzzles
 
 
 def main():
-    # host = st.context.headers.get("host", "").split(":")[0].lower()
-    IS_LOCAL = st_config.get_option("server.address") in ["localhost", "127.0.0.1"] or st_config.get_option("server.port") == 8501
-    if IS_LOCAL:
-        render_puzzlehunt()
+    host = st.context.headers.get("host", "").split(":")[0].lower()
+
+    PUZZLEHUNT_SUBDOMAIN = "sifrovacka.deadlocked.me"
+    ACCESS_TOKEN = st.secrets.get("ACCESS_TOKEN")
+
+    if host == PUZZLEHUNT_SUBDOMAIN:
+        if ACCESS_TOKEN:  # Not public access
+            token = st.query_params.get("token")
+            if token == ACCESS_TOKEN:
+                render_puzzlehunt()
+            else:
+                render_main()
+        else:
+            render_puzzlehunt()
     else:
         render_main()
-
-    # PUZZLEHUNT_SUBDOMAIN = "sifrovacka.deadlocked.me"
-
-    # if host == PUZZLEHUNT_SUBDOMAIN:
-    #     render_puzzlehunt()
-    # else:
-    #     render_main()
 
 
 def render_main():
@@ -29,13 +31,6 @@ def render_main():
 
 
 def render_puzzlehunt():
-    # db.init_puzzles_db()
-    # db.init_teams_db()
-    # db.init_actions_db()
-    # db.init_submissions_db()
-    # db.init_logging_db()
-    # db.init_settings_db()
-
     st.set_page_config(page_title="Šifrovačka", page_icon="static/favicon.png", layout="centered")
     st.markdown("""
         <style>
@@ -45,7 +40,7 @@ def render_puzzlehunt():
         </style>
     """, unsafe_allow_html=True)
 
-    ACTIVE_PUZZLES = db.get_active_puzzles()
+    ACTIVE_PUZZLES = [f"puzzle_{p}" for p in db.get_active_puzzles()]
 
     if "is_hydrated" not in st.session_state:
         st.session_state.is_hydrated = False
@@ -59,7 +54,7 @@ def render_puzzlehunt():
         if not cookies:
             st.stop()
 
-        saved_user_id = cookies.get("logged_in_user_id")
+        saved_user_id = cookies.get("logged_in_team_id")
         if saved_user_id:
             st.session_state.current_user = saved_user_id
             st.session_state.current_page = "puzzles"

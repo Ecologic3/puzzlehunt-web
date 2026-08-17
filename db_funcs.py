@@ -1,11 +1,27 @@
 import os
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, TypedDict, cast
 
 import streamlit as st
 from sqlalchemy import create_engine, exc, text
 from sqlalchemy.engine import RowMapping
+
+
+class PuzzleData(TypedDict):
+    puzzle_order: int
+    name: str
+    activation_code: str | None
+    solution: str
+    hint: str
+    filename: str | None
+    location: str
+
+class PuzzleStatus(TypedDict):
+    is_activated: bool
+    is_hinted: bool
+    is_deaded: bool
+
 
 DATABASE_URL = os.environ.get("DATABASE_URL") or st.secrets.get("DATABASE_URL")
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
@@ -31,8 +47,8 @@ engine = get_database_engine()
 
 # ------------------- Initialization functions -------------------
 
-def init_puzzles_db() -> None:
-    query = text("""
+def initialize_tables() -> None:
+    puzzles = text("""
         CREATE TABLE IF NOT EXISTS puzzles
             (puzzle_order INTEGER UNIQUE DEFAULT NULL,
             name TEXT,
@@ -40,29 +56,21 @@ def init_puzzles_db() -> None:
             solution TEXT,
             hint TEXT,
             filename TEXT DEFAULT NULL,
-            location TEXT DEFAULT '|')
+            location_a TEXT DEFAULT '|',
+            location_b TEXT DEFAULT '|')
     """)
-    with engine.begin() as conn:
-        conn.execute(query)
-
-
-def init_teams_db() -> None:
-    query = text("""
+    teams = text("""
         CREATE TABLE IF NOT EXISTS teams
             (id SERIAL PRIMARY KEY,
             team_color TEXT UNIQUE,
             team_name TEXT DEFAULT NULL,
             initial_password TEXT,
+            path TEXT NOT NULL CHECK (path IN ('a', 'b')),
             password TEXT DEFAULT NULL,
             points INTEGER DEFAULT 0,
             total_time INTERVAL DEFAULT INTERVAL '0 seconds')
     """)
-    with engine.begin() as conn:
-        conn.execute(query)
-
-
-def init_actions_db() -> None:
-    query = text("""
+    actions = text("""
         CREATE TABLE IF NOT EXISTS actions
             (id SERIAL PRIMARY KEY,
             team_id INTEGER REFERENCES teams(id),
@@ -70,12 +78,7 @@ def init_actions_db() -> None:
             action TEXT,  -- possible actions: begin, hint, dead, submit
             time TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP)
     """)
-    with engine.begin() as conn:
-        conn.execute(query)
-
-
-def init_submissions_db() -> None:
-    query = text("""
+    submissions = text("""
         CREATE TABLE IF NOT EXISTS submissions
             (id SERIAL PRIMARY KEY,
             team_id INTEGER REFERENCES teams(id),
@@ -84,12 +87,7 @@ def init_submissions_db() -> None:
             correct BOOLEAN,
             time TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP)
     """)
-    with engine.begin() as conn:
-        conn.execute(query)
-
-
-def init_logging_db() -> None:
-    query = text("""
+    login_attempts = text("""
         CREATE TABLE IF NOT EXISTS login_attempts
             (id SERIAL PRIMARY KEY,
             input_username TEXT DEFAULT NULL,
@@ -98,32 +96,31 @@ def init_logging_db() -> None:
             user_agent TEXT,
             time TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP)
     """)
-    with engine.begin() as conn:
-        conn.execute(query)
-
-
-def init_settings_db() -> None:
-    query = text("""
+    app_settings = text("""
         CREATE TABLE IF NOT EXISTS app_settings
             (key TEXT PRIMARY KEY,
             value TEXT NOT NULL)
     """)
+    queries = [puzzles, teams, actions, submissions,
+               login_attempts, app_settings]
     with engine.begin() as conn:
-        conn.execute(query)
+        for query in queries:
+            conn.execute(query)
 
 # ------------------------ Admin functions ------------------------
 
-def create_team(team_color: str, initial_password: str) -> bool:
+def create_team(team_color: str, initial_password: str, path: str) -> bool:
     query = text("""
         INSERT INTO teams 
-            (team_color, initial_password)
+            (team_color, initial_password, path)
         VALUES 
-            (:team_color, :password)
+            (:team_color, :password, :path)
     """)
     try:
         with engine.begin() as conn:
             conn.execute(query, {"team_color": team_color, 
-                                 "password": initial_password})
+                                 "password": initial_password,
+                                 "path": path})
             return True
     except exc.IntegrityError:
         return False
@@ -139,14 +136,15 @@ def remove_team(team_color: str) -> bool:
         return result.rowcount > 0
 
 
-def edit_team(team_color: str, team_name: str, password: str, points: str, total_time: timedelta | None) -> bool:
+def edit_team(team_color: str, team_name: str, path: str, password: str, points: str, total_time: timedelta | None) -> bool:
     select_query = text("""
-        SELECT team_name, password, points, total_time FROM teams
+        SELECT team_name, path, password, points, total_time FROM teams
         WHERE team_color = :team_color
     """)
     update_query = text("""
         UPDATE teams SET 
             team_name = :team_name,
+            path = :path,
             password = :password,
             points = :points,
             total_time = :total_time
@@ -156,15 +154,16 @@ def edit_team(team_color: str, team_name: str, password: str, points: str, total
         result = conn.execute(select_query, {"team_color": team_color})
         if result.rowcount == 0:
             return False
-        user_data = result.fetchone()
-        if not user_data:
+        team_data = result.fetchone()
+        if not team_data:
             return False
-        team_name = team_name if team_name else user_data[0]
-        password = password if password else user_data[1]
-        points = points if points else user_data[2]
-        total_time = total_time if total_time else user_data[3]
+        team_name = team_name if team_name else team_data[0]
+        path = path if path else team_data[1]
+        password = password if password else team_data[2]
+        points = points if points else team_data[3]
+        total_time = total_time if total_time else team_data[4]
         conn.execute(update_query, {"team_color": team_color, "team_name": team_name,
-                                    "password": password, "points": points,
+                                    "path": path, "password": password, "points": points,
                                     "total_time": total_time})
         return True
 
@@ -191,7 +190,7 @@ def remove_puzzle(name: str) -> bool:
 
 
 def edit_puzzle(name: str, order: int | None, activation_code: str, solution: str,
-                hint: str, filename: str, location: str) -> bool:
+                hint: str, filename: str, location_a: str, location_b: str) -> bool:
     select_query = text("""
         SELECT * FROM puzzles
         WHERE name = :name
@@ -204,7 +203,8 @@ def edit_puzzle(name: str, order: int | None, activation_code: str, solution: st
             solution = :solution,
             hint = :hint,
             filename = :filename,
-            location = :location
+            location_a = :location_a,
+            location_b = :location_b
         WHERE name = :name
     """)
     try:
@@ -221,12 +221,14 @@ def edit_puzzle(name: str, order: int | None, activation_code: str, solution: st
             solution = solution if solution else puzzle_data[3]
             hint = hint if hint else puzzle_data[4]
             filename = filename if filename else puzzle_data[5]
-            location = location if location else puzzle_data[6]
+            location_a = location_a if location_a else puzzle_data[6]
+            location_b = location_b if location_b else puzzle_data[7]
             conn.execute(update_query, {"name": name, "order": order,
                                         "activation_code": activation_code,
                                         "solution": solution, "hint": hint,
                                         "filename": filename,
-                                        "location": location})
+                                        "location_a": location_a,
+                                        "location_b": location_b})
             return True
     except exc.IntegrityError:
         return False
@@ -243,6 +245,16 @@ def execute_query(input_query: str) -> tuple[bool, list[dict[str, Any]]]:
         except exc.SQLAlchemyError as e:
             return False, [{"error": e}]
 
+
+def reset_database() -> None:
+    query = text("""
+        DROP SCHEMA public CASCADE;
+        CREATE SCHEMA public;
+    """)
+    with engine.begin() as conn:
+        conn.execute(query)
+    initialize_tables()
+
 # ----------------------- Logging functions -----------------------
 
 def log_login_attempt(input_username: str | None, password: str, ip_address: str | None, user_agent: str | None) -> None:
@@ -252,8 +264,12 @@ def log_login_attempt(input_username: str | None, password: str, ip_address: str
         VALUES
             (:input_username, :password, :ip_address, :user_agent)
     """)
-    with engine.begin() as conn:
-        conn.execute(query, {"input_username": input_username, "password": password, "ip_address": ip_address, "user_agent": user_agent})
+    try:
+        with engine.begin() as conn:
+            conn.execute(query, {"input_username": input_username, "password": password,
+                                "ip_address": ip_address, "user_agent": user_agent})
+    except exc.SQLAlchemyError:
+        pass
 
 
 def log_action(team_id: int, puzzle_order: int, action: str) -> None:
@@ -268,21 +284,26 @@ def log_action(team_id: int, puzzle_order: int, action: str) -> None:
 
 # ----------------------- Display functions -----------------------
 
-def get_leaderboard() -> Sequence[RowMapping]:
-    query = text("""
+def get_leaderboard(admin: bool = False) -> Sequence[RowMapping]:
+    extra_col1 = "id AS \"ID\"," if admin else ""
+    extra_col2 = "path AS \"Cesta\"," if admin else ""
+    query = text(f"""
         SELECT
             ROW_NUMBER() OVER (
                 ORDER BY points DESC, total_time ASC
-            ) AS "Pořadí",
+            ) AS "Pořadí",{extra_col1}
             team_color AS "Barva týmu",
-            team_name AS "Jméno týmu",
+            team_name AS "Jméno týmu",{extra_col2}
             points AS "Body",
             TO_CHAR(total_time, 'FMHH24 "h" FMMI "m" FMSS "s"') AS "Celkový čas"
         FROM teams
         ORDER BY points DESC, total_time ASC
     """)
-    with engine.connect() as conn:
-        return conn.execute(query).mappings().all()
+    try:
+        with engine.connect() as conn:
+            return conn.execute(query).mappings().all()
+    except exc.SQLAlchemyError:
+        return []
 
 
 def get_action_log() -> Sequence[RowMapping]:
@@ -340,7 +361,8 @@ def get_puzzles() -> Sequence[RowMapping]:
             solution AS "Heslo",
             hint AS "Nápověda",
             filename as "Název souboru",
-            location as "Lokace šifry"
+            location_a as "Lokace šifry (cesta a)",
+            location_b as "Lokace šifry (cesta b)"
         FROM puzzles
         ORDER BY puzzle_order
     """)
@@ -349,8 +371,8 @@ def get_puzzles() -> Sequence[RowMapping]:
 
 # ----------------------- Puzzle functions -----------------------
 
-@st.cache_data(ttl=600)
-def get_active_puzzles() -> list[str]:
+@st.cache_data()
+def get_active_puzzles() -> list[int]:
     query = text("""
         SELECT puzzle_order FROM puzzles
         WHERE puzzle_order IS NOT NULL
@@ -358,57 +380,30 @@ def get_active_puzzles() -> list[str]:
     """)
     with engine.connect() as conn:
         result = conn.execute(query).fetchall()
-    return ["puzzle_" + str(row[0]) for row in result]
+    return [row[0] for row in result]
 
 
-def get_puzzle_name(puzzle_order: int) -> str:
+@st.cache_data
+def get_puzzle_data(puzzle_order: int) -> PuzzleData:
     query = text("""
-        SELECT name FROM puzzles
+        SELECT * FROM puzzles
         WHERE puzzle_order = :puzzle_order
     """)
     with engine.connect() as conn:
         result = conn.execute(query, {"puzzle_order": puzzle_order}).one()
-        return result[0]
+        return cast(PuzzleData, dict(result._mapping))
 
 
-def get_puzzle_activation_code(puzzle_order: int) -> str:
+def get_puzzle_status(team_id: int, puzzle_order: int) -> PuzzleStatus:
     query = text("""
-        SELECT activation_code FROM puzzles
-        WHERE puzzle_order = :puzzle_order
+        SELECT 
+            EXISTS (SELECT 1 FROM actions WHERE team_id = :team_id AND puzzle_order = :puzzle_order AND action = 'begin') AS is_activated,
+            EXISTS (SELECT 1 FROM actions WHERE team_id = :team_id AND puzzle_order = :puzzle_order AND action = 'hint') AS is_hinted,
+            EXISTS (SELECT 1 FROM actions WHERE team_id = :team_id AND puzzle_order = :puzzle_order AND action = 'dead') AS is_deaded
     """)
     with engine.connect() as conn:
-        result = conn.execute(query, {"puzzle_order": puzzle_order}).one()
-        return result[0]
-
-
-def get_puzzle_solution(puzzle_order: int) -> str:
-    query = text("""
-        SELECT solution FROM puzzles
-        WHERE puzzle_order = :puzzle_order
-    """)
-    with engine.connect() as conn:
-        result = conn.execute(query, {"puzzle_order": puzzle_order}).one()
-        return result[0]
-
-
-def get_puzzle_location(puzzle_order: int) -> str:
-    query = text("""
-        SELECT location FROM puzzles
-        WHERE puzzle_order = :puzzle_order
-    """)
-    with engine.connect() as conn:
-        result = conn.execute(query, {"puzzle_order": puzzle_order}).one()
-        return result[0]
-
-
-def get_puzzle_hint(puzzle_order: int) -> str:
-    query = text("""
-        SELECT hint FROM puzzles
-        WHERE puzzle_order = :puzzle_order
-    """)
-    with engine.connect() as conn:
-        result = conn.execute(query, {"puzzle_order": puzzle_order}).one()
-        return result[0]
+        result = conn.execute(query, {"team_id": team_id, "puzzle_order": puzzle_order}).one()
+        return cast(PuzzleStatus, dict(result._mapping))
 
 
 def get_current_puzzle(team_id: int) -> int:
@@ -422,6 +417,7 @@ def get_current_puzzle(team_id: int) -> int:
         return result[0]+1 if result else 1
 
 
+@st.cache_data()
 def get_start_time(team_id: int, puzzle_order: int) -> datetime:
     query = text("""
         SELECT time FROM actions
@@ -435,7 +431,7 @@ def get_start_time(team_id: int, puzzle_order: int) -> datetime:
                                     "puzzle_order": puzzle_order}).scalar_one()
 
 
-def get_incorrect_attempts(team_id: int, puzzle_order: int) -> int:
+def get_incorrect_submissions(team_id: int, puzzle_order: int) -> int:
     query = text("""
         SELECT * FROM submissions
         WHERE
@@ -448,59 +444,26 @@ def get_incorrect_attempts(team_id: int, puzzle_order: int) -> int:
                                     "puzzle_order": puzzle_order}).rowcount
 
 
-def is_activated(team_id: int, puzzle_order: int) -> bool:
-    query = text("""
-        SELECT * FROM actions
-        WHERE
-            team_id = :team_id AND
-            puzzle_order = :puzzle_order AND
-            action = 'begin'
-    """)
-    with engine.connect() as conn:
-        result = conn.execute(query, {"team_id": team_id, "puzzle_order": puzzle_order})
-        return result.rowcount > 0
-
-
-def is_hinted(team_id: int, puzzle_order: int) -> bool:
-    query = text("""
-        SELECT * FROM actions
-        WHERE
-            team_id = :team_id AND
-            puzzle_order = :puzzle_order AND
-            action = 'hint'
-    """)
-    with engine.connect() as conn:
-        result = conn.execute(query, {"team_id": team_id, "puzzle_order": puzzle_order})
-        return result.rowcount > 0
-
-
-def is_deaded(team_id: int, puzzle_order: int) -> bool:
-    query = text("""
-        SELECT * FROM actions
-        WHERE
-            team_id = :team_id AND
-            puzzle_order = :puzzle_order AND
-            action = 'dead'
-    """)
-    with engine.connect() as conn:
-        result = conn.execute(query, {"team_id": team_id, "puzzle_order": puzzle_order})
-        return result.rowcount > 0
-
-
 def check_hint_eligiblity(team_id: int, puzzle_order: int) -> bool:
     start_time = get_start_time(team_id, puzzle_order)
+    if start_time.tzinfo is None:
+        start_time = start_time.replace(tzinfo=timezone.utc)
     return (datetime.now(timezone.utc) - start_time) >= timedelta(minutes=15)
 
 
 def check_dead_eligiblity(team_id: int, puzzle_order: int) -> bool:
-    if not is_hinted(team_id, puzzle_order):
+    puzzle_status = get_puzzle_status(team_id, puzzle_order)
+    if not puzzle_status["is_hinted"]:
         return False
     start_time = get_start_time(team_id, puzzle_order)
+    if start_time.tzinfo is None:
+        start_time = start_time.replace(tzinfo=timezone.utc)
     return (datetime.now(timezone.utc) - start_time) >= timedelta(minutes=30)
 
 
 def dead_puzzle(team_id: int, puzzle_order: int) -> None:
-    submit_solution(team_id, puzzle_order, get_puzzle_solution(puzzle_order))
+    puzzle_data = get_puzzle_data(puzzle_order)
+    submit_solution(team_id, puzzle_order, puzzle_data["solution"])
 
 
 def submit_solution(team_id: int, puzzle_order: int, input_solution: str) -> bool:
@@ -510,7 +473,9 @@ def submit_solution(team_id: int, puzzle_order: int, input_solution: str) -> boo
         VALUES
             (:team_id, :puzzle_order, :input_solution, :is_correct)
     """)
-    solution = get_puzzle_solution(puzzle_order)
+    puzzle_data = get_puzzle_data(puzzle_order)
+    puzzle_status = get_puzzle_status(team_id, puzzle_order)
+    solution = puzzle_data["solution"]
     is_correct = solution == input_solution
     with engine.begin() as conn:
         conn.execute(query, {"team_id": team_id, "puzzle_order": puzzle_order,
@@ -518,11 +483,11 @@ def submit_solution(team_id: int, puzzle_order: int, input_solution: str) -> boo
         if is_correct:
             start_time = get_start_time(team_id, puzzle_order)
             add_time(team_id, start_time)
-            if not is_deaded(team_id, puzzle_order):
-                if is_hinted(team_id, puzzle_order):
+            if not puzzle_status["is_deaded"]:
+                if puzzle_status["is_hinted"]:
                     add_points(team_id, 1)
                 else:
-                    if get_incorrect_attempts(team_id, puzzle_order) > 1:
+                    if get_incorrect_submissions(team_id, puzzle_order) > 1:  # Two or more incorrect submissions
                         add_points(team_id, 1)
                     else:
                         add_points(team_id, 2)
@@ -552,6 +517,17 @@ def set_password(team_id: int, new_password: str) -> None:
         conn.execute(query, {"team_id": team_id, "password": new_password})
 
 
+@st.cache_data
+def get_team_path(team_id: int) -> str:
+    query = text("""
+        SELECT path FROM teams
+        WHERE
+            id = :team_id
+    """)
+    with engine.connect() as conn:
+        return conn.execute(query, {"team_id": team_id}).one()[0]
+
+
 def add_points(team_id: int, amount: int) -> None:
     query = text("""
         UPDATE teams SET
@@ -574,6 +550,7 @@ def add_time(team_id: int, start_time: datetime) -> None:
         conn.execute(query, {"team_id": team_id, "start_time": start_time})
 
 
+@st.cache_data
 def get_setting(setting: str) -> bool:
     query = text("""
         SELECT value FROM app_settings
