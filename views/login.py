@@ -79,6 +79,6 @@ def render_admin_login():
 
 def render_logout():
     if st.sidebar.button("Odhlásit se", use_container_width=True):
-        get_cookie_manager().delete("logged_in_team_id", key="logout_cookie_del")
-        st.session_state.current_page = "login"
         st.session_state.current_user = None
+        st.session_state.current_page = "login"
+        get_cookie_manager().delete("logged_in_team_id", key="logout_cookie_del")
