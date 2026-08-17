@@ -1,6 +1,7 @@
 import os
 
 import streamlit as st
+from streamlit.errors import StreamlitSecretNotFoundError
 
 import db_funcs as db
 from auth import get_cookie_manager
@@ -11,7 +12,10 @@ def main():
     host = st.context.headers.get("host", "").split(":")[0].lower()
 
     PUZZLEHUNT_SUBDOMAIN = "sifrovacka.deadlocked.me"
-    ACCESS_TOKEN = os.environ.get("ACCESS_TOKEN") or st.secrets.get("ACCESS_TOKEN")
+    try:
+        ACCESS_TOKEN = st.secrets.get("ACCESS_TOKEN")
+    except StreamlitSecretNotFoundError:
+        ACCESS_TOKEN = os.environ.get("ACCESS_TOKEN")
 
     if host == PUZZLEHUNT_SUBDOMAIN:
         if ACCESS_TOKEN:  # Not public access
