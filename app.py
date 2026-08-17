@@ -11,7 +11,7 @@ def main():
     host = st.context.headers.get("host", "").split(":")[0].lower()
 
     PUZZLEHUNT_SUBDOMAIN = "sifrovacka.deadlocked.me"
-    ACCESS_TOKEN = st.secrets.get("ACCESS_TOKEN") or os.environ.get("ACCESS_TOKEN")
+    ACCESS_TOKEN = os.environ.get("ACCESS_TOKEN") or st.secrets.get("ACCESS_TOKEN")
 
     if host == PUZZLEHUNT_SUBDOMAIN:
         if ACCESS_TOKEN:  # Not public access
