@@ -41,7 +41,7 @@ def render_navigation():
     is_end = db.get_setting("is_end")
     is_end = False if is_end is None else is_end == "true"
     if st.sidebar.button("Výsledky", type="primary", disabled=not is_end,
-                         help="Bude dostupné po konci hry" if not is_end else None, use_container_width=True):
+                         help="Budou dostupné po konci hry." if not is_end else None, use_container_width=True):
         st.session_state.current_page = "leaderboard"
         st.rerun()
 
@@ -186,6 +186,24 @@ def render_puzzle(puzzle_page: str):
                             file_name=f"{current_puzzle_name}.pdf",
                             mime="application/pdf",
                             type="secondary",
+                            use_container_width=True
+                        )
+            
+            # Download puzzle solution PDF button
+            with cols2[2]:
+                is_end = db.get_setting("is_end")
+                is_end = False if is_end is None else is_end == "true"
+                puzzle_filename = current_puzzle_data["filename"]
+                if puzzle_filename and os.path.exists(f"solutions/{puzzle_filename}_reseni.pdf"):
+                    with open(f"solutions/{puzzle_filename}_reseni.pdf", "rb") as file:
+                        st.download_button(
+                            label="Vzorové řešení",
+                            data=file,
+                            file_name=f"{current_puzzle_name} Řešení.pdf",
+                            mime="application/pdf",
+                            type="primary",
+                            help="Bude dostupné po konci hry." if not is_end else None,
+                            disabled=not is_end,
                             use_container_width=True
                         )
 

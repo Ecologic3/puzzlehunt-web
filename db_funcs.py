@@ -15,7 +15,9 @@ class PuzzleData(TypedDict):
     solution: str
     hint: str
     filename: str | None
-    location: str
+    solution_filename: str | None
+    location_a: str
+    location_b: str
 
 
 class PuzzleStatus(TypedDict):
@@ -48,7 +50,7 @@ def get_database_engine():
 engine = get_database_engine()
 
 
-# ------------------- Initialization functions -------------------
+# ------------------- Initialization function -------------------
 
 def initialize_tables() -> None:
     puzzles = text("""
@@ -230,8 +232,7 @@ def edit_puzzle(name: str, order: int | None, activation_code: str, solution: st
             conn.execute(update_query, {"name": name, "order": order,
                                         "activation_code": activation_code,
                                         "solution": solution, "hint": hint,
-                                        "filename": filename,
-                                        "location_a": location_a,
+                                        "filename": filename, "location_a": location_a,
                                         "location_b": location_b})
             return True
     except exc.IntegrityError:
@@ -512,7 +513,7 @@ def check_login(input_username: str, password: str) -> int | None:
     """)
     with engine.connect() as conn:
         result = conn.execute(query, {"input_username": input_username, "password": password}).fetchone()
-        return result[0] if result is not None else None
+        return result[0] if result else None
 
 
 def set_password(team_id: int, new_password: str) -> None:
@@ -566,4 +567,5 @@ def get_setting(setting: str) -> Any | None:
             key = :setting
     """)
     with engine.connect() as conn:
-        return conn.execute(query, {"setting": setting}).fetchone()
+        result = conn.execute(query, {"setting": setting}).fetchone()
+        return result[0] if result else None
