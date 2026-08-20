@@ -15,7 +15,6 @@ class PuzzleData(TypedDict):
     solution: str
     hint: str
     filename: str | None
-    solution_filename: str | None
     location_a: str
     location_b: str
 

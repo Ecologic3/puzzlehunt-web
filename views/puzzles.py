@@ -188,7 +188,7 @@ def render_puzzle(puzzle_page: str):
                             type="secondary",
                             use_container_width=True
                         )
-            
+
             # Download puzzle solution PDF button
             with cols2[2]:
                 is_end = db.get_setting("is_end")
@@ -210,7 +210,7 @@ def render_puzzle(puzzle_page: str):
             # Hint and dead options
             hint_eligible = db.check_hint_eligiblity(current_user, current_puzzle)
             with cols1[0], st.popover("Získat nápovědu", type="primary", disabled=not hint_eligible,
-                                      help="Nápovědu můžete získat až po 15 minutách od začátku řešení." 
+                                      help="Nápovědu můžete získat až po 15 minutách od začátku řešení."
                                       if not hint_eligible else None, use_container_width=True):
                 if is_hinted:
                     st.write("Nápovědu jste už získali.")
