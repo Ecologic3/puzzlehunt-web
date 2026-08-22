@@ -1,6 +1,7 @@
 import os
 from time import sleep
 
+import pandas as pd
 import streamlit as st
 
 import db_funcs as db
@@ -13,6 +14,12 @@ def render_navigation():
     puzzles = db.get_active_puzzles()
 
     st.sidebar.title("Přehled", anchor=False)
+
+    # Current team stats
+    team_stats = db.get_team_data(current_user)
+    metric_cols = st.sidebar.columns([1, 2])
+    metric_cols[0].metric(label="Body", value=team_stats["points"])
+    metric_cols[1].metric(label="Čas", value=team_stats["total_time"])
 
     # Navigation buttons
     button_type = "primary" if current_page == "puzzles" else "secondary"
@@ -38,10 +45,12 @@ def render_navigation():
             use_container_width=True
         )
 
+    # Final leaderboard
     is_end = db.get_setting("is_end")
     is_end = False if is_end is None else is_end == "true"
     if st.sidebar.button("Výsledky", type="primary", disabled=not is_end,
-                         help="Budou dostupné po konci hry." if not is_end else None, use_container_width=True):
+                         help="Budou dostupné po konci hry." if not is_end else None,
+                         use_container_width=True):
         st.session_state.current_page = "leaderboard"
         st.rerun()
 
@@ -65,9 +74,24 @@ def render_navigation():
 
 
 def render_leaderboard():
+    current_user = st.session_state.current_user
+    current_team_name = db.get_team_data(current_user)["team_color"]
+
     st.title("Výsledky", anchor=False)
     leaderboard_data = db.get_leaderboard()
-    st.dataframe(leaderboard_data, hide_index=True)
+
+    df = pd.DataFrame(leaderboard_data)
+    styled_df = df.style.apply(
+        lambda row: [
+            "background-color: #4c1d95; color: #ffffff; font-weight: bold"
+            if row["Barva týmu"] == current_team_name
+            else ""
+        ]
+        * len(row),
+        axis=1,
+    )
+
+    st.dataframe(styled_df, hide_index=True)
 
 
 def render_main():
@@ -83,7 +107,7 @@ def render_main():
         st.balloons()
     else:
         current_puzzle_data = db.get_puzzle_data(current_puzzle)
-        team_path = db.get_team_path(current_user)
+        team_path = db.get_team_data(current_user)["path"]
         current_puzzle_location, specification = current_puzzle_data[f"location_{team_path}"].split("|")
         st.write("Klikněte na odemčenou šifru pro zadání aktivačního kódu nebo hesla")
         st.write("*Nezapomeňte zadat aktivační kód ihned po nalezení šifry!*")
@@ -134,7 +158,7 @@ def render_puzzle(puzzle_page: str):
         elif current_puzzle <= len(puzzles):  # Show current puzzle details
             current_puzzle_data = db.get_puzzle_data(current_puzzle)
             current_puzzle_name = current_puzzle_data["name"]
-            team_path = db.get_team_path(current_user)
+            team_path = db.get_team_data(current_user)["path"]
             current_puzzle_location, specification = current_puzzle_data[f"location_{team_path}"].split("|")  # type: ignore[literal-required]
             st.write(f"Lokace poslední odemčené šifry je [zde]({current_puzzle_location}), upřesnítko: {specification}.")
             if st.button(f"Poslední odemčená šifra: **{current_puzzle}. {current_puzzle_name}**", type="primary"):
@@ -148,7 +172,7 @@ def render_puzzle(puzzle_page: str):
         current_puzzle_data = db.get_puzzle_data(current_puzzle)
         current_puzzle_status = db.get_puzzle_status(current_user, current_puzzle)
         current_puzzle_name = current_puzzle_data["name"]
-        team_path = db.get_team_path(current_user)
+        team_path = db.get_team_data(current_user)["path"]
         current_puzzle_location, specification = current_puzzle_data[f"location_{team_path}"].split("|")  # type: ignore[literal-required]
 
         is_activated = current_puzzle_status["is_activated"]

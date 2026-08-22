@@ -25,6 +25,13 @@ class PuzzleStatus(TypedDict):
     is_deaded: bool
 
 
+class TeamStats(TypedDict):
+    team_color: str
+    path: str
+    points: int
+    total_time: str
+
+
 DATABASE_URL = os.environ.get("DATABASE_URL") or st.secrets.get("DATABASE_URL")
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
@@ -297,11 +304,11 @@ def get_leaderboard(admin: bool = False) -> Sequence[RowMapping]:
         SELECT
             ROW_NUMBER() OVER (
                 ORDER BY points DESC, total_time ASC
-            ) AS "Pořadí",{extra_col1}
+            ) || '.' AS "Pořadí",{extra_col1}
             team_color AS "Barva týmu",
             team_name AS "Jméno týmu",{extra_col2}
             points AS "Body",
-            TO_CHAR(total_time, 'FMHH24 "h" FMMI "m" FMSS "s"') AS "Celkový čas"
+            TO_CHAR(total_time, 'FMHH24"h "MI"m "SS"s"') AS "Celkový čas"
         FROM teams
         ORDER BY points DESC, total_time ASC
     """)
@@ -525,15 +532,17 @@ def set_password(team_id: int, new_password: str) -> None:
         conn.execute(query, {"team_id": team_id, "password": new_password})
 
 
-@st.cache_data
-def get_team_path(team_id: int) -> str:
+def get_team_data(team_id: int) -> TeamStats:
     query = text("""
-        SELECT path FROM teams
+        SELECT
+            team_color, path, points, TO_CHAR(total_time, 'FMHH24"h "MI"m "SS"s"') AS total_time
+        FROM teams
         WHERE
             id = :team_id
     """)
     with engine.connect() as conn:
-        return conn.execute(query, {"team_id": team_id}).one()[0]
+        result = conn.execute(query, {"team_id": team_id}).one()
+        return cast(TeamStats, dict(result._mapping))
 
 
 def add_points(team_id: int, amount: int) -> None:
