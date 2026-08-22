@@ -1,4 +1,5 @@
 import os
+import unicodedata
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from typing import Any, TypedDict, cast
@@ -518,7 +519,9 @@ def check_login(input_username: str, password: str) -> int | None:
         AND :password IN (initial_password, password)
     """)
     with engine.connect() as conn:
-        result = conn.execute(query, {"input_username": input_username, "password": password}).fetchone()
+        normalized_username = unicodedata.normalize("NFD", input_username.lower())
+        normalized_username = "".join(c for c in normalized_username if unicodedata.category(c) != "Mn")
+        result = conn.execute(query, {"input_username": normalized_username, "password": password}).fetchone()
         return result[0] if result else None
 
 

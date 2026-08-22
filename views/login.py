@@ -90,3 +90,4 @@ def process_login():
 def process_logout():
     get_cookie_manager().delete("logged_in_team_id", key="logout_cookie_del")
     st.session_state.clear()
+    st.stop()
