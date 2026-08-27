@@ -2,6 +2,7 @@ import os
 from datetime import timedelta
 from time import sleep
 
+import pandas as pd
 import streamlit as st
 
 import db_funcs as db
@@ -16,7 +17,19 @@ def render():
     st.subheader("Leaderboard", anchor=False)
     leaderboard_data = db.get_leaderboard(True)
     st.dataframe(leaderboard_data, hide_index=True)
-    if st.button("Refresh"):
+    if st.button("Refresh", key="refresh_leaderboard"):
+        st.rerun()
+    st.divider()
+
+    # Puzzle stats rendering
+    st.subheader("Puzzle time stats", anchor=False)
+    puzzle_stats = db.get_puzzle_stats()
+    puzzle_df = pd.DataFrame(puzzle_stats).pivot(
+        index="Šifra", columns="team_color", values="status"
+    )
+    puzzle_df = puzzle_df.reset_index()
+    st.dataframe(puzzle_df, hide_index=True)
+    if st.button("Refresh", key="refresh_stats"):
         st.rerun()
     st.divider()
 

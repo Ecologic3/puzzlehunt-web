@@ -320,6 +320,31 @@ def get_leaderboard(admin: bool = False) -> Sequence[RowMapping]:
         return []
 
 
+def get_puzzle_stats() -> Sequence[RowMapping]:
+    query = text("""
+        SELECT
+            p.puzzle_order || '. ' || p.name AS "Šifra",
+            t.team_color,
+            TO_CHAR(s.time - a.time, 'FMHH24:MI:SS') AS status
+        FROM puzzles p
+        CROSS JOIN teams t
+        LEFT JOIN actions a 
+            ON a.team_id = t.id 
+            AND a.puzzle_order = p.puzzle_order 
+            AND a.action = 'begin'
+        LEFT JOIN submissions s 
+            ON s.team_id = t.id 
+            AND s.puzzle_order = p.puzzle_order 
+            AND s.correct = TRUE
+        ORDER BY p.puzzle_order ASC
+    """)
+    try:
+        with engine.connect() as conn:
+            return conn.execute(query).mappings().all()
+    except exc.SQLAlchemyError:
+        return []
+
+
 def get_action_log() -> Sequence[RowMapping]:
     query = text("""
         SELECT
