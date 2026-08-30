@@ -18,7 +18,7 @@ def main():
         ACCESS_TOKEN = os.environ.get("ACCESS_TOKEN")
 
     if host == PUZZLEHUNT_SUBDOMAIN:
-        if ACCESS_TOKEN:  # Not public access
+        if ACCESS_TOKEN is not None:  # Not public access
             token = st.query_params.get("secret")
             if token == ACCESS_TOKEN:
                 render_puzzlehunt()

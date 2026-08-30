@@ -98,6 +98,8 @@ def render_main():
     current_user = st.session_state.current_user
     current_puzzle = db.get_current_puzzle(current_user)
     puzzles = db.get_active_puzzles()
+    is_end = db.get_setting("is_end")
+    is_end = False if is_end is None else is_end == "true"
 
     st.title("Seznam šifer", anchor=False)
 
@@ -105,13 +107,16 @@ def render_main():
     if current_puzzle > len(puzzles):
         st.subheader("**Úspěšně jste vyřešili všechny šifry!** 🎉")
         st.balloons()
-    else:
+    elif not is_end:
         current_puzzle_data = db.get_puzzle_data(current_puzzle)
         team_path = db.get_team_data(current_user)["path"]
         current_puzzle_location, specification = current_puzzle_data[f"location_{team_path}"].split("|")
         st.write("Klikněte na odemčenou šifru pro zadání aktivačního kódu nebo hesla")
         st.write("*Nezapomeňte zadat aktivační kód ihned po nalezení šifry!*")
         st.write(f"Lokace poslední odemčené šifry je [zde]({current_puzzle_location}), upřesnítko: {specification}.")
+
+    if is_end:
+        st.warning("Hra už **skončila.** Vzorová řešení si můžete prohlédnout u jednotlivých šifer.")
 
     st.divider()
 
@@ -122,7 +127,19 @@ def render_main():
         puzzle_name = puzzle_data["name"]
         puzzle_page = f"puzzle_{puzzle_order}"
 
-        if puzzle_order < current_puzzle:  # Solved puzzle
+        if is_end:  # Game ended
+            puzzle_filename = puzzle_data["filename"]
+            if puzzle_filename and os.path.exists(f"solutions/{puzzle_filename}_reseni.pdf"):
+                with open(f"solutions/{puzzle_filename}_reseni.pdf", "rb") as file:
+                    st.download_button(
+                        label=f"Vzorové řešení {puzzle_order}. {puzzle_name}",
+                        data=file,
+                        file_name=f"{puzzle_name} Řešení.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
+
+        elif puzzle_order < current_puzzle:  # Solved puzzle
             is_deaded = puzzle_status["is_deaded"]
             solved_status = "Deadnuta ❎" if is_deaded else "Vyřešena ✅"
             if st.button(f"{puzzle_order}. {puzzle_name}: {solved_status}", use_container_width=True):
@@ -147,83 +164,56 @@ def render_puzzle(puzzle_page: str):
     rendered_puzzle = int(puzzle_page.replace("puzzle_", ""))
     rendered_puzzle_data = db.get_puzzle_data(rendered_puzzle)
     rendered_puzzle_name = rendered_puzzle_data["name"]
+    rendered_puzzle_filename = rendered_puzzle_data["filename"]
+    is_end = db.get_setting("is_end")
+    is_end = False if is_end is None else is_end == "true"
 
     st.title(f"{rendered_puzzle}. {rendered_puzzle_name}", anchor=False)
+    if is_end:
+        st.warning("Hra už **skončila.** Vzorová řešení si můžete prohlédnout u jednotlivých šifer.")
 
     if rendered_puzzle < current_puzzle:  # Already solved puzzle
         st.success("Tuto šifru jste už **vyřešili**.")
-        if rendered_puzzle == len(puzzles):  # All puzzles solved
+        rendered_puzzle_data = db.get_puzzle_data(rendered_puzzle)
+        rendered_puzzle_name = rendered_puzzle_data["name"]
+        if current_puzzle-1 == len(puzzles):  # All puzzles solved
             st.success("Všechny šifry byly vyřešeny! 🎉")
             st.balloons()
-        elif current_puzzle <= len(puzzles):  # Show current puzzle details
+            # Download puzzle solution PDF button
+            rendered_puzzle_filename = rendered_puzzle_data["filename"]
+            if rendered_puzzle_filename and os.path.exists(f"solutions/{rendered_puzzle_filename}_reseni.pdf"):
+                with open(f"solutions/{rendered_puzzle_filename}_reseni.pdf", "rb") as file:
+                    st.download_button(
+                        label="Vzorové řešení",
+                        data=file,
+                        file_name=f"{rendered_puzzle_name} Řešení.pdf",
+                        mime="application/pdf",
+                        type="primary",
+                        help="Bude dostupné po konci hry." if not is_end else None,
+                        disabled=not is_end,
+                        use_container_width=True
+                    )
+
+        elif not is_end and current_puzzle <= len(puzzles):  # Show current puzzle details if game didn't end yet
+            team_path = db.get_team_data(current_user)["path"]
             current_puzzle_data = db.get_puzzle_data(current_puzzle)
             current_puzzle_name = current_puzzle_data["name"]
-            team_path = db.get_team_data(current_user)["path"]
             current_puzzle_location, specification = current_puzzle_data[f"location_{team_path}"].split("|")  # type: ignore[literal-required]
             st.write(f"Lokace poslední odemčené šifry je [zde]({current_puzzle_location}), upřesnítko: {specification}.")
-            if st.button(f"Poslední odemčená šifra: **{current_puzzle}. {current_puzzle_name}**", type="primary"):
-                st.session_state.current_page = f"puzzle_{current_puzzle}"
-                st.rerun()
-
-    elif rendered_puzzle > current_puzzle:   # Locked puzzle
-        st.error("Tato šifra je **zamčená**. Vyřešte všechny předchozí šifry pro odemčení.")
-
-    else:  # Current puzzle
-        current_puzzle_data = db.get_puzzle_data(current_puzzle)
-        current_puzzle_status = db.get_puzzle_status(current_user, current_puzzle)
-        current_puzzle_name = current_puzzle_data["name"]
-        team_path = db.get_team_data(current_user)["path"]
-        current_puzzle_location, specification = current_puzzle_data[f"location_{team_path}"].split("|")  # type: ignore[literal-required]
-
-        is_activated = current_puzzle_status["is_activated"]
-        if is_activated:  # Solveable
-            st.info("Tuto šifru už řešíte a čas vám běží.")
-            is_hinted = current_puzzle_status["is_hinted"]
-            if is_hinted:  # Show hint
-                hint = current_puzzle_data["hint"]
-                st.warning(f"**Nápověda:** {hint}")
-
-            with st.form(f"solution_form_{current_puzzle}"):
-                input_solution = st.text_input("Heslo:")
-                submitted = st.form_submit_button("Odevzdat", type="primary")
-
-                if submitted:  # Solution check
-                    db.log_action(current_user, current_puzzle, "submit")
-                    if db.submit_solution(current_user, current_puzzle, input_solution.upper()):
-                        st.success("Správné heslo!")
-                        sleep(2)
-                        st.rerun()
-                    else:
-                        st.error("Nesprávné heslo!")
-
-            cols1 = st.columns([1, 2, 1])
-            cols2 = st.columns([1, 2, 1])
-
-            # Download puzzle PDF button
-            with cols1[2]:
-                puzzle_filename = current_puzzle_data["filename"]
-                if puzzle_filename and os.path.exists(f"puzzles/{puzzle_filename}.pdf"):
-                    with open(f"puzzles/{puzzle_filename}.pdf", "rb") as file:
-                        st.download_button(
-                            label="Stáhnout šifru",
-                            data=file,
-                            file_name=f"{current_puzzle_name}.pdf",
-                            mime="application/pdf",
-                            type="secondary",
-                            use_container_width=True
-                        )
-
+            cols = st.columns([1, 2, 1])
+            with cols[0]:
+                if st.button(f"Poslední odemčená šifra: **{current_puzzle}. {current_puzzle_name}**", type="primary"):
+                    st.session_state.current_page = f"puzzle_{current_puzzle}"
+                    st.rerun()
             # Download puzzle solution PDF button
-            with cols2[2]:
-                is_end = db.get_setting("is_end")
-                is_end = False if is_end is None else is_end == "true"
-                puzzle_filename = current_puzzle_data["filename"]
-                if puzzle_filename and os.path.exists(f"solutions/{puzzle_filename}_reseni.pdf"):
-                    with open(f"solutions/{puzzle_filename}_reseni.pdf", "rb") as file:
+            with cols[2]:
+                rendered_puzzle_filename = rendered_puzzle_data["filename"]
+                if rendered_puzzle_filename and os.path.exists(f"solutions/{rendered_puzzle_filename}_reseni.pdf"):
+                    with open(f"solutions/{rendered_puzzle_filename}_reseni.pdf", "rb") as file:
                         st.download_button(
                             label="Vzorové řešení",
                             data=file,
-                            file_name=f"{current_puzzle_name} Řešení.pdf",
+                            file_name=f"{rendered_puzzle_name} Řešení.pdf",
                             mime="application/pdf",
                             type="primary",
                             help="Bude dostupné po konci hry." if not is_end else None,
@@ -231,47 +221,155 @@ def render_puzzle(puzzle_page: str):
                             use_container_width=True
                         )
 
-            # Hint and dead options
-            hint_eligible = db.check_hint_eligiblity(current_user, current_puzzle)
-            with cols1[0], st.popover("Získat nápovědu", type="primary", disabled=not hint_eligible,
-                                      help="Nápovědu můžete získat až po 15 minutách od začátku řešení."
-                                      if not hint_eligible else None, use_container_width=True):
-                if is_hinted:
-                    st.write("Nápovědu jste už získali.")
-                else:
-                    st.write("Opravdu chcete získat nápovědu? Po nápovědě můžete za šifru získat nejvýše 1 bod.")
-                    if st.button("Potvrdit", key="conf_1"):
-                        st.success("Nápověda odemčena.")
-                        db.log_action(current_user, current_puzzle, "hint")
-                        sleep(2)
-                        st.rerun()
+        else:  # Game ended, all puzzles not solved
+            if rendered_puzzle_filename and os.path.exists(f"solutions/{rendered_puzzle_filename}_reseni.pdf"):
+                with open(f"solutions/{rendered_puzzle_filename}_reseni.pdf", "rb") as file:
+                    st.download_button(
+                        label="Vzorové řešení",
+                        data=file,
+                        file_name=f"{rendered_puzzle_name} Řešení.pdf",
+                        mime="application/pdf",
+                        type="primary",
+                        help="Bude dostupné po konci hry." if not is_end else None,
+                        disabled=not is_end,
+                        use_container_width=True
+                    )
 
-            dead_eligible = db.check_dead_eligiblity(current_user, current_puzzle)
-            with cols2[0], st.popover("Vzdát šifru", type="primary", disabled=not dead_eligible,
-                                      help="Vzdát šifru můžete po získání nápovědy a až po 30 minutách od začátku řešení."
-                                      if not dead_eligible else None, use_container_width=True):
-                st.write("Opravdu chcete vzdát šifru? Po deadnutí nezískáte za šifru **žádné** body!")
-                if st.button("Potvrdit", key="conf_2"):
-                    st.success("Šifra deadnuta.")
-                    db.log_action(current_user, current_puzzle, "dead")
-                    db.dead_puzzle(current_user, current_puzzle)
-                    sleep(2)
-                    st.rerun()
+    elif rendered_puzzle > current_puzzle:   # Locked puzzle
+        if is_end:
+            if rendered_puzzle_filename and os.path.exists(f"solutions/{rendered_puzzle_filename}_reseni.pdf"):
+                with open(f"solutions/{rendered_puzzle_filename}_reseni.pdf", "rb") as file:
+                    st.download_button(
+                        label="Vzorové řešení",
+                        data=file,
+                        file_name=f"{rendered_puzzle_name} Řešení.pdf",
+                        mime="application/pdf",
+                        type="primary",
+                        help="Bude dostupné po konci hry." if not is_end else None,
+                        disabled=not is_end,
+                        use_container_width=True
+                    )
+        else:
+            st.error("Tato šifra je **zamčená**. Vyřešte všechny předchozí šifry pro odemčení.")
 
-        else:  # Not activated
-            st.info("Pro zahájení řešení šifry zadejte aktivační kód.")
-            st.warning(f"Lokace této šifry je [zde]({current_puzzle_location}), upřesnítko: {specification}.")
+    else:  # Current puzzle
+        if is_end:
+            if rendered_puzzle_filename and os.path.exists(f"solutions/{rendered_puzzle_filename}_reseni.pdf"):
+                with open(f"solutions/{rendered_puzzle_filename}_reseni.pdf", "rb") as file:
+                    st.download_button(
+                        label="Vzorové řešení",
+                        data=file,
+                        file_name=f"{rendered_puzzle_name} Řešení.pdf",
+                        mime="application/pdf",
+                        type="primary",
+                        help="Bude dostupné po konci hry." if not is_end else None,
+                        disabled=not is_end,
+                        use_container_width=True
+                    )
+        else:
+            current_puzzle_data = db.get_puzzle_data(current_puzzle)
+            current_puzzle_status = db.get_puzzle_status(current_user, current_puzzle)
+            current_puzzle_name = current_puzzle_data["name"]
+            team_path = db.get_team_data(current_user)["path"]
+            current_puzzle_location, specification = current_puzzle_data[f"location_{team_path}"].split("|")  # type: ignore[literal-required]
 
-            with st.form(f"activation_form_{current_puzzle}"):
-                input_code = st.text_input("Aktivační kód:")
-                submitted = st.form_submit_button("Odevzdat", type="primary")
+            is_activated = current_puzzle_status["is_activated"]
+            if is_activated:  # Solveable
+                st.info("Tuto šifru už řešíte a čas vám běží.")
+                is_hinted = current_puzzle_status["is_hinted"]
+                if is_hinted:  # Show hint
+                    hint = current_puzzle_data["hint"]
+                    st.warning(f"**Nápověda:** {hint}")
 
-                if submitted:  # Activation code check
-                    activation_code = current_puzzle_data["activation_code"]
-                    if input_code.lower() == activation_code:
-                        st.success("Šifra aktivována, můžete řešit.")
-                        db.log_action(current_user, current_puzzle, "begin")
-                        sleep(2)
-                        st.rerun()
+                with st.form(f"solution_form_{current_puzzle}"):
+                    input_solution = st.text_input("Heslo:")
+                    submitted = st.form_submit_button("Odevzdat", type="primary")
+
+                    if submitted:  # Solution check
+                        db.log_action(current_user, current_puzzle, "submit")
+                        if db.submit_solution(current_user, current_puzzle, input_solution.upper()):
+                            st.success("Správné heslo!")
+                            sleep(2)
+                            st.rerun()
+                        else:
+                            st.error("Nesprávné heslo!")
+
+                cols1 = st.columns([1, 2, 1])
+                cols2 = st.columns([1, 2, 1])
+
+                # Download puzzle PDF button
+                with cols1[2]:
+                    puzzle_filename = current_puzzle_data["filename"]
+                    if puzzle_filename and os.path.exists(f"puzzles/{puzzle_filename}.pdf"):
+                        with open(f"puzzles/{puzzle_filename}.pdf", "rb") as file:
+                            st.download_button(
+                                label="Stáhnout šifru",
+                                data=file,
+                                file_name=f"{current_puzzle_name}.pdf",
+                                mime="application/pdf",
+                                type="secondary",
+                                use_container_width=True
+                            )
+
+                # Download puzzle solution PDF button
+                with cols2[2]:
+                    is_end = db.get_setting("is_end")
+                    is_end = False if is_end is None else is_end == "true"
+                    puzzle_filename = current_puzzle_data["filename"]
+                    if puzzle_filename and os.path.exists(f"solutions/{puzzle_filename}_reseni.pdf"):
+                        with open(f"solutions/{puzzle_filename}_reseni.pdf", "rb") as file:
+                            st.download_button(
+                                label="Vzorové řešení",
+                                data=file,
+                                file_name=f"{current_puzzle_name} Řešení.pdf",
+                                mime="application/pdf",
+                                type="primary",
+                                help="Bude dostupné po konci hry." if not is_end else None,
+                                disabled=not is_end,
+                                use_container_width=True
+                            )
+
+                # Hint and dead options
+                hint_eligible = db.check_hint_eligiblity(current_user, current_puzzle)
+                with cols1[0], st.popover("Získat nápovědu", type="primary", disabled=not hint_eligible,
+                                          help="Nápovědu můžete získat až po 15 minutách od začátku řešení."
+                                          if not hint_eligible else None, use_container_width=True):
+                    if is_hinted:
+                        st.write("Nápovědu jste už získali.")
                     else:
-                        st.error("Nesprávný kód!")
+                        st.write("Opravdu chcete získat nápovědu? Po nápovědě můžete za šifru získat nejvýše 1 bod.")
+                        if st.button("Potvrdit", key="conf_1"):
+                            st.success("Nápověda odemčena.")
+                            db.log_action(current_user, current_puzzle, "hint")
+                            sleep(2)
+                            st.rerun()
+
+                dead_eligible = db.check_dead_eligiblity(current_user, current_puzzle)
+                with cols2[0], st.popover("Vzdát šifru", type="primary", disabled=not dead_eligible,
+                                          help="Vzdát šifru můžete po získání nápovědy a až po 30 minutách od začátku řešení."
+                                          if not dead_eligible else None, use_container_width=True):
+                    st.write("Opravdu chcete vzdát šifru? Po deadnutí nezískáte za šifru **žádné** body!")
+                    if st.button("Potvrdit", key="conf_2"):
+                        st.success("Šifra deadnuta.")
+                        db.log_action(current_user, current_puzzle, "dead")
+                        db.dead_puzzle(current_user, current_puzzle)
+                        sleep(2)
+                        st.rerun()
+
+            else:  # Not activated
+                st.info("Pro zahájení řešení šifry zadejte aktivační kód.")
+                st.warning(f"Lokace této šifry je [zde]({current_puzzle_location}), upřesnítko: {specification}.")
+
+                with st.form(f"activation_form_{current_puzzle}"):
+                    input_code = st.text_input("Aktivační kód:")
+                    submitted = st.form_submit_button("Odevzdat", type="primary")
+
+                    if submitted:  # Activation code check
+                        activation_code = current_puzzle_data["activation_code"]
+                        if input_code.lower() == activation_code:
+                            st.success("Šifra aktivována, můžete řešit.")
+                            db.log_action(current_user, current_puzzle, "begin")
+                            sleep(2)
+                            st.rerun()
+                        else:
+                            st.error("Nesprávný kód!")
