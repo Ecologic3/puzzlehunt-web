@@ -2,11 +2,16 @@ import datetime
 import os
 
 import streamlit as st
+from streamlit.errors import StreamlitSecretNotFoundError
 
 import db_funcs as db
 from auth import get_cookie_manager
 
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD") or st.secrets.get("ADMIN_PASSWORD")
+try:
+    ADMIN_PASSWORD = st.secrets.get("ADMIN_PASSWORD")
+except StreamlitSecretNotFoundError:
+    ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
+
 if not ADMIN_PASSWORD:
     raise ValueError("Admin password is not set up!")
 

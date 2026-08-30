@@ -4,10 +4,17 @@ from time import sleep
 
 import pandas as pd
 import streamlit as st
+from streamlit.errors import StreamlitSecretNotFoundError
 
 import db_funcs as db
 
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD") or st.secrets.get("ADMIN_PASSWORD")
+try:
+    ADMIN_PASSWORD = st.secrets.get("ADMIN_PASSWORD")
+except StreamlitSecretNotFoundError:
+    ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD")
+
+if not ADMIN_PASSWORD:
+    raise ValueError("Admin password is not set up!")
 
 
 def render():
@@ -24,10 +31,13 @@ def render():
     # Puzzle stats rendering
     st.subheader("Puzzle time stats", anchor=False)
     puzzle_stats = db.get_puzzle_stats()
-    puzzle_df = pd.DataFrame(puzzle_stats).pivot(
-        index="Šifra", columns="team_color", values="status"
-    )
-    puzzle_df = puzzle_df.reset_index()
+    if puzzle_stats:
+        puzzle_df = pd.DataFrame(puzzle_stats).pivot(
+            index="Šifra", columns="team_color", values="status"
+        )
+        puzzle_df = puzzle_df.reset_index()
+    else:
+        puzzle_df = []
     st.dataframe(puzzle_df, hide_index=True)
     if st.button("Refresh", key="refresh_stats"):
         st.rerun()
