@@ -53,8 +53,6 @@ def render_admin_login():
             if password == ADMIN_PASSWORD:
                 st.session_state.current_page = "admin_dashboard"
                 st.rerun()
-            elif "epstein" in password.lower():
-                st.error("Skoro!")
             else:
                 st.error("Nesprávné adminské heslo.")
 
