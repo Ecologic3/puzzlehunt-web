@@ -186,6 +186,7 @@ def render():
                 activation_code = st.text_input("Activation code")
                 solution = st.text_input("Solution")
                 hint = st.text_input("Hint")
+                is_bonus = st.text_input("Bonus")
                 filename = st.text_input("Filename")
                 location_a = st.text_input("Location for path a")
                 location_b = st.text_input("Location for path b")
@@ -198,8 +199,17 @@ def render():
                             order = int(order)
                     else:
                         order = None
+                    if is_bonus:
+                        if is_bonus.lower() == "true":
+                            is_bonus = True
+                        elif is_bonus.lower() == "false":
+                            is_bonus = False
+                        else:
+                            is_bonus = None
+                    else:
+                        is_bonus = None
                     if db.edit_puzzle(name, order, activation_code, solution,
-                                      hint, filename, location_a, location_b):
+                                      hint, is_bonus, filename, location_a, location_b):
                         st.cache_data.clear()
                         st.session_state.admin_action = None
                         st.rerun()

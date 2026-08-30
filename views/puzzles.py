@@ -270,12 +270,16 @@ def render_puzzle(puzzle_page: str):
             current_puzzle_data = db.get_puzzle_data(current_puzzle)
             current_puzzle_status = db.get_puzzle_status(current_user, current_puzzle)
             current_puzzle_name = current_puzzle_data["name"]
+            current_puzzle_is_bonus = current_puzzle_data["is_bonus"]
             team_path = db.get_team_data(current_user)["path"]
             current_puzzle_location, specification = current_puzzle_data[f"location_{team_path}"].split("|")  # type: ignore[literal-required]
 
             is_activated = current_puzzle_status["is_activated"]
             if is_activated:  # Solveable
-                st.info("Tuto šifru už řešíte a čas vám běží.")
+                if current_puzzle_is_bonus:
+                    st.info("Toto je bonusová šifra, žádný čas se vám za ni nepočítá.")
+                else:
+                    st.info("Tuto šifru už řešíte a čas vám běží.")
                 is_hinted = current_puzzle_status["is_hinted"]
                 if is_hinted:  # Show hint
                     hint = current_puzzle_data["hint"]

@@ -7,6 +7,7 @@ from typing import Any, TypedDict, cast
 import streamlit as st
 from sqlalchemy import create_engine, exc, text
 from sqlalchemy.engine import RowMapping
+from streamlit.errors import StreamlitSecretNotFoundError
 
 
 class PuzzleData(TypedDict):
@@ -15,6 +16,7 @@ class PuzzleData(TypedDict):
     activation_code: str | None
     solution: str
     hint: str
+    is_bonus: bool
     filename: str | None
     location_a: str
     location_b: str
@@ -33,7 +35,11 @@ class TeamStats(TypedDict):
     total_time: str
 
 
-DATABASE_URL = os.environ.get("DATABASE_URL") or st.secrets.get("DATABASE_URL")
+try:
+    DATABASE_URL = st.secrets.get("DATABASE_URL")
+except StreamlitSecretNotFoundError:
+    DATABASE_URL = os.environ.get("DATABASE_URL")
+
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
@@ -67,6 +73,7 @@ def initialize_tables() -> None:
             activation_code TEXT DEFAULT NULL,
             solution TEXT,
             hint TEXT,
+            is_bonus BOOLEAN DEFAULT FALSE,
             filename TEXT DEFAULT NULL,
             location_a TEXT DEFAULT '|',
             location_b TEXT DEFAULT '|')
@@ -203,7 +210,7 @@ def remove_puzzle(name: str) -> bool:
 
 
 def edit_puzzle(name: str, order: int | None, activation_code: str, solution: str,
-                hint: str, filename: str, location_a: str, location_b: str) -> bool:
+                hint: str, is_bonus: bool | None, filename: str, location_a: str, location_b: str) -> bool:
     select_query = text("""
         SELECT * FROM puzzles
         WHERE name = :name
@@ -215,6 +222,7 @@ def edit_puzzle(name: str, order: int | None, activation_code: str, solution: st
             activation_code = :activation_code,
             solution = :solution,
             hint = :hint,
+            is_bonus = :is_bonus,
             filename = :filename,
             location_a = :location_a,
             location_b = :location_b
@@ -233,14 +241,15 @@ def edit_puzzle(name: str, order: int | None, activation_code: str, solution: st
             activation_code = activation_code if activation_code else puzzle_data[2]
             solution = solution if solution else puzzle_data[3]
             hint = hint if hint else puzzle_data[4]
-            filename = filename if filename else puzzle_data[5]
-            location_a = location_a if location_a else puzzle_data[6]
-            location_b = location_b if location_b else puzzle_data[7]
+            is_bonus = is_bonus if is_bonus is not None else puzzle_data[5]
+            filename = filename if filename else puzzle_data[6]
+            location_a = location_a if location_a else puzzle_data[7]
+            location_b = location_b if location_b else puzzle_data[8]
             conn.execute(update_query, {"name": name, "order": order,
                                         "activation_code": activation_code,
                                         "solution": solution, "hint": hint,
-                                        "filename": filename, "location_a": location_a,
-                                        "location_b": location_b})
+                                        "is_bonus": is_bonus, "filename": filename,
+                                        "location_a": location_a, "location_b": location_b})
             return True
     except exc.IntegrityError:
         return False
@@ -328,13 +337,13 @@ def get_puzzle_stats() -> Sequence[RowMapping]:
             TO_CHAR(s.time - a.time, 'FMHH24:MI:SS') AS status
         FROM puzzles p
         CROSS JOIN teams t
-        LEFT JOIN actions a 
-            ON a.team_id = t.id 
-            AND a.puzzle_order = p.puzzle_order 
+        LEFT JOIN actions a
+            ON a.team_id = t.id
+            AND a.puzzle_order = p.puzzle_order
             AND a.action = 'begin'
-        LEFT JOIN submissions s 
-            ON s.team_id = t.id 
-            AND s.puzzle_order = p.puzzle_order 
+        LEFT JOIN submissions s
+            ON s.team_id = t.id
+            AND s.puzzle_order = p.puzzle_order
             AND s.correct = TRUE
         ORDER BY p.puzzle_order ASC
     """)
@@ -521,8 +530,9 @@ def submit_solution(team_id: int, puzzle_order: int, input_solution: str) -> boo
         conn.execute(query, {"team_id": team_id, "puzzle_order": puzzle_order,
                              "input_solution": input_solution, "is_correct": is_correct})
         if is_correct:
-            start_time = get_start_time(team_id, puzzle_order)
-            add_time(team_id, start_time)
+            if not puzzle_data["is_bonus"]:  # Non bonus puzzle
+                start_time = get_start_time(team_id, puzzle_order)
+                add_time(team_id, start_time)
             if not puzzle_status["is_deaded"]:
                 if puzzle_status["is_hinted"]:
                     add_points(team_id, 1)
